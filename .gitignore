@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.cover
+coverage.xml
+
+# Node / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+frontend/dist/
+frontend/.vite/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
+
+# Secrets / Local
+*.pem
+*.key
+secrets/
+
+# Alembic
+backend/alembic/versions/__pycache__/
+
+# Test artifacts
+sample_data/receipts/*.png
+sample_data/receipts/*.jpg
+!sample_data/receipts/sample_*.png
+
+# Logs
+logs/
+*.log
+
+# SQLite databases
+*.db
+
+# Lint/build artifacts
+eslint_report.json
+lint.json
+lint_output.txt
+lint_results.json
+
+# Agent/IDE caches
+.agent/
+.cursor/
+.claude/

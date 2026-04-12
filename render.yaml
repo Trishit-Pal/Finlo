@@ -1,0 +1,47 @@
+services:
+  # The FastAPI Backend
+  - type: web
+    name: financecoach-backend
+    env: docker
+    dockerfilePath: ./infra/Dockerfile.backend
+    dockerContext: ./backend
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2"
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: "production"
+      - key: DATABASE_URL
+        sync: false
+      - key: BACKEND_CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: LLM_PROVIDER_KEY
+        sync: false
+      - key: EMBEDDING_PROVIDER_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PII_ENCRYPTION_KEY
+        sync: false
+      - key: STORAGE_ENCRYPTION_KEY
+        sync: false
+      - key: STORAGE_ENDPOINT
+        sync: false
+      - key: STORAGE_ACCESS_KEY
+        sync: false
+      - key: STORAGE_SECRET_KEY
+        sync: false
+      - key: STORAGE_BUCKET
+        value: "finance-receipts"
+      - key: SENTRY_DSN
+        sync: false
+      # Use Upstash Redis (free tier) or Render Redis
+      - key: REDIS_URL
+        sync: false

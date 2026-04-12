@@ -1,0 +1,6 @@
+[lint]
+select = ["E", "F", "W", "I"]
+
+[lint.per-file-ignores]
+"app/tests/*" = ["S101"]
+"app/db/models.py" = ["E501"]
