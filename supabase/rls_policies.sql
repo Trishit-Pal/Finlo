@@ -81,6 +81,30 @@ create policy feedback_owner_all on feedback for all to authenticated
     using (user_id::text = auth.uid()::text)
     with check (user_id::text = auth.uid()::text);
 
+-- Budget Versions
+alter table if exists budget_versions enable row level security;
+drop policy if exists budget_versions_owner_all on budget_versions;
+create policy budget_versions_owner_all on budget_versions for all to authenticated
+    using (budget_id::text in (
+        select id::text from budgets where user_id::text = auth.uid()::text
+    ))
+    with check (budget_id::text in (
+        select id::text from budgets where user_id::text = auth.uid()::text
+    ));
+
+-- User Consents
+alter table if exists user_consents enable row level security;
+drop policy if exists user_consents_owner_all on user_consents;
+create policy user_consents_owner_all on user_consents for all to authenticated
+    using (user_id::text = auth.uid()::text)
+    with check (user_id::text = auth.uid()::text);
+
+-- Audit Logs (read-only for own user, no direct writes from client)
+alter table if exists audit_logs enable row level security;
+drop policy if exists audit_logs_select_own on audit_logs;
+create policy audit_logs_select_own on audit_logs for select to authenticated
+    using (user_id::text = auth.uid()::text);
+
 -- ── System-managed tables: deny direct access ──────────────────────────────
 drop policy if exists embeddings_deny_all on embeddings;
 create policy embeddings_deny_all on embeddings for all to authenticated
