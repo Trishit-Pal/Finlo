@@ -47,7 +47,7 @@ flowchart LR
 ```
 
 ## Tech Stack
-- Frontend: React 18, TypeScript, Vite, Tailwind CSS
+- Frontend: React 19, TypeScript, Vite 8, Tailwind CSS
 - Backend: FastAPI, SQLAlchemy async, Alembic
 - Data: Supabase Postgres (with `vector`), Redis
 - Deployment: Vercel (frontend), container host for backend
