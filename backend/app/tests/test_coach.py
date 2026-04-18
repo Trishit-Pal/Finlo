@@ -1,11 +1,9 @@
 """Unit tests for coach service prompt outputs."""
-
 from __future__ import annotations
 
 from app.services.coach import _mock_coach_output
 
 # ── Mock output structure ─────────────────────────────────────────────────────
-
 
 def test_mock_coach_output_keys():
     context = {
@@ -90,10 +88,8 @@ def test_mock_coach_estimated_savings_positive():
 
 # ── Feedback classifier ───────────────────────────────────────────────────────
 
-
 def test_heuristic_classify_bug():
     from app.services.feedback_pipeline import _heuristic_classify
-
     result = _heuristic_classify("The app crashes when I upload a receipt", rating=1)
     assert result["classification"] == "Bug"
     assert result["priority"] == "high"
@@ -101,14 +97,12 @@ def test_heuristic_classify_bug():
 
 def test_heuristic_classify_feature():
     from app.services.feedback_pipeline import _heuristic_classify
-
     result = _heuristic_classify("I would like to add bank account sync", rating=4)
     assert result["classification"] == "FeatureRequest"
 
 
 def test_heuristic_classify_praise():
     from app.services.feedback_pipeline import _heuristic_classify
-
     result = _heuristic_classify("Love the app, great job!", rating=5)
     assert result["classification"] == "Praise"
     assert result["priority"] == "low"
@@ -116,15 +110,11 @@ def test_heuristic_classify_praise():
 
 def test_heuristic_classify_ux():
     from app.services.feedback_pipeline import _heuristic_classify
-
-    result = _heuristic_classify(
-        "It is confusing to navigate the budget page", rating=3
-    )
+    result = _heuristic_classify("It is confusing to navigate the budget page", rating=3)
     assert result["classification"] == "UX"
 
 
 def test_heuristic_classify_low_rating_escalates_priority():
     from app.services.feedback_pipeline import _heuristic_classify
-
     result = _heuristic_classify("Decent app", rating=1)
     assert result["priority"] == "high"

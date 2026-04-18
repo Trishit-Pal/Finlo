@@ -4,11 +4,9 @@ Revision ID: 20260411_0004
 Revises: 20260408_0003
 Create Date: 2026-04-11
 """
-
 from __future__ import annotations
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "20260411_0004"
@@ -81,75 +79,21 @@ def _drop_immutable_profile_triggers() -> None:
 
 
 def upgrade() -> None:
-    inspector = sa.inspect(op.get_bind())
-    tables = set(inspector.get_table_names())
-    user_columns = {c["name"] for c in inspector.get_columns("users")}
-    receipt_columns = {c["name"] for c in inspector.get_columns("receipts")}
-    budget_columns = {c["name"] for c in inspector.get_columns("budgets")}
-
-    # Fresh DBs created from current metadata may already include these objects.
-    if (
-        {"budget_versions", "user_consents", "audit_logs"} <= tables
-        and {"username", "username_source", "date_of_birth_source"} <= user_columns
-        and {
-            "source_hash",
-            "duplicate_of_receipt_id",
-            "duplicate_confidence",
-            "due_date",
-            "category_suggestion",
-            "recurring_indicator",
-            "account_suffix",
-            "parser_provider",
-        }
-        <= receipt_columns
-        and {"edit_count", "version", "last_edited_at"} <= budget_columns
-    ):
-        _create_immutable_profile_triggers()
-        return
-
     # users
     op.add_column("users", sa.Column("username", sa.String(length=64), nullable=True))
-    op.add_column(
-        "users", sa.Column("username_source", sa.String(length=16), nullable=True)
-    )
-    op.add_column(
-        "users", sa.Column("date_of_birth_source", sa.String(length=16), nullable=True)
-    )
+    op.add_column("users", sa.Column("username_source", sa.String(length=16), nullable=True))
+    op.add_column("users", sa.Column("date_of_birth_source", sa.String(length=16), nullable=True))
     op.create_index("ix_users_username", "users", ["username"], unique=False)
 
     # receipts
-    op.add_column(
-        "receipts", sa.Column("source_hash", sa.String(length=64), nullable=True)
-    )
-    op.add_column(
-        "receipts",
-        sa.Column("duplicate_of_receipt_id", sa.String(length=36), nullable=True),
-    )
-    op.add_column(
-        "receipts", sa.Column("duplicate_confidence", sa.Float(), nullable=True)
-    )
-    op.add_column(
-        "receipts", sa.Column("due_date", sa.String(length=32), nullable=True)
-    )
-    op.add_column(
-        "receipts",
-        sa.Column("category_suggestion", sa.String(length=128), nullable=True),
-    )
-    op.add_column(
-        "receipts",
-        sa.Column(
-            "recurring_indicator",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.false(),
-        ),
-    )
-    op.add_column(
-        "receipts", sa.Column("account_suffix", sa.String(length=8), nullable=True)
-    )
-    op.add_column(
-        "receipts", sa.Column("parser_provider", sa.String(length=64), nullable=True)
-    )
+    op.add_column("receipts", sa.Column("source_hash", sa.String(length=64), nullable=True))
+    op.add_column("receipts", sa.Column("duplicate_of_receipt_id", sa.String(length=36), nullable=True))
+    op.add_column("receipts", sa.Column("duplicate_confidence", sa.Float(), nullable=True))
+    op.add_column("receipts", sa.Column("due_date", sa.String(length=32), nullable=True))
+    op.add_column("receipts", sa.Column("category_suggestion", sa.String(length=128), nullable=True))
+    op.add_column("receipts", sa.Column("recurring_indicator", sa.Boolean(), nullable=False, server_default=sa.false()))
+    op.add_column("receipts", sa.Column("account_suffix", sa.String(length=8), nullable=True))
+    op.add_column("receipts", sa.Column("parser_provider", sa.String(length=64), nullable=True))
     op.create_foreign_key(
         "fk_receipts_duplicate_of_receipt_id",
         "receipts",
@@ -158,25 +102,12 @@ def upgrade() -> None:
         ["id"],
         ondelete="SET NULL",
     )
-    op.create_index(
-        "ix_receipts_source_hash", "receipts", ["source_hash"], unique=False
-    )
+    op.create_index("ix_receipts_source_hash", "receipts", ["source_hash"], unique=False)
 
     # budgets
-    op.add_column(
-        "budgets",
-        sa.Column(
-            "edit_count", sa.Integer(), nullable=False, server_default=sa.text("0")
-        ),
-    )
-    op.add_column(
-        "budgets",
-        sa.Column("version", sa.Integer(), nullable=False, server_default=sa.text("1")),
-    )
-    op.add_column(
-        "budgets",
-        sa.Column("last_edited_at", sa.DateTime(timezone=True), nullable=True),
-    )
+    op.add_column("budgets", sa.Column("edit_count", sa.Integer(), nullable=False, server_default=sa.text("0")))
+    op.add_column("budgets", sa.Column("version", sa.Integer(), nullable=False, server_default=sa.text("1")))
+    op.add_column("budgets", sa.Column("last_edited_at", sa.DateTime(timezone=True), nullable=True))
 
     # budget versions
     op.create_table(
@@ -189,34 +120,15 @@ def upgrade() -> None:
         sa.Column("category", sa.String(length=128), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("snapshot", sa.JSON(), nullable=False),
-        sa.Column(
-            "change_reason",
-            sa.String(length=32),
-            nullable=False,
-            server_default="update",
-        ),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
+        sa.Column("change_reason", sa.String(length=32), nullable=False, server_default="update"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["budget_id"], ["budgets.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_budget_versions_budget_id", "budget_versions", ["budget_id"], unique=False
-    )
-    op.create_index(
-        "ix_budget_versions_user_id", "budget_versions", ["user_id"], unique=False
-    )
-    op.create_index(
-        "ix_budget_versions_budget_version",
-        "budget_versions",
-        ["budget_id", "version"],
-        unique=True,
-    )
+    op.create_index("ix_budget_versions_budget_id", "budget_versions", ["budget_id"], unique=False)
+    op.create_index("ix_budget_versions_user_id", "budget_versions", ["user_id"], unique=False)
+    op.create_index("ix_budget_versions_budget_version", "budget_versions", ["budget_id", "version"], unique=True)
 
     # user consents
     op.create_table(
@@ -224,42 +136,18 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("user_id", sa.String(length=36), nullable=False),
         sa.Column("consent_type", sa.String(length=64), nullable=False),
-        sa.Column(
-            "scope",
-            sa.String(length=128),
-            nullable=False,
-            server_default="transactions",
-        ),
-        sa.Column(
-            "status", sa.String(length=16), nullable=False, server_default="granted"
-        ),
+        sa.Column("scope", sa.String(length=128), nullable=False, server_default="transactions"),
+        sa.Column("status", sa.String(length=16), nullable=False, server_default="granted"),
         sa.Column("metadata", sa.JSON(), nullable=True),
         sa.Column("granted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_user_consents_user_id", "user_consents", ["user_id"], unique=False
-    )
-    op.create_index(
-        "ix_user_consents_unique_scope",
-        "user_consents",
-        ["user_id", "consent_type", "scope"],
-        unique=True,
-    )
+    op.create_index("ix_user_consents_user_id", "user_consents", ["user_id"], unique=False)
+    op.create_index("ix_user_consents_unique_scope", "user_consents", ["user_id", "consent_type", "scope"], unique=True)
 
     # audit logs
     op.create_table(
@@ -272,25 +160,13 @@ def upgrade() -> None:
         sa.Column("ip_address", sa.String(length=64), nullable=True),
         sa.Column("user_agent", sa.String(length=255), nullable=True),
         sa.Column("metadata", sa.JSON(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_audit_logs_user_id", "audit_logs", ["user_id"], unique=False)
-    op.create_index(
-        "ix_audit_logs_created_at", "audit_logs", ["created_at"], unique=False
-    )
-    op.create_index(
-        "ix_audit_logs_action_created",
-        "audit_logs",
-        ["action", "created_at"],
-        unique=False,
-    )
+    op.create_index("ix_audit_logs_created_at", "audit_logs", ["created_at"], unique=False)
+    op.create_index("ix_audit_logs_action_created", "audit_logs", ["action", "created_at"], unique=False)
 
     _create_immutable_profile_triggers()
 
@@ -317,9 +193,7 @@ def downgrade() -> None:
     op.drop_column("budgets", "edit_count")
 
     op.drop_index("ix_receipts_source_hash", table_name="receipts")
-    op.drop_constraint(
-        "fk_receipts_duplicate_of_receipt_id", "receipts", type_="foreignkey"
-    )
+    op.drop_constraint("fk_receipts_duplicate_of_receipt_id", "receipts", type_="foreignkey")
     op.drop_column("receipts", "parser_provider")
     op.drop_column("receipts", "account_suffix")
     op.drop_column("receipts", "recurring_indicator")

@@ -68,9 +68,6 @@ jobs:
       - name: Install Python deps
         run: pip install -r requirements.txt
         working-directory: backend
-      - name: Apply migrations
-        run: alembic upgrade head
-        working-directory: backend
       - name: Run tests
         run: pytest app/tests/ -v --cov=app --cov-report=xml
         working-directory: backend
@@ -136,26 +133,8 @@ jobs:
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [backend-lint, backend-test, frontend-lint, frontend-build, security-gates]
+    needs: [backend-test, frontend-build]
     steps:
       - uses: actions/checkout@v4
       - name: Build backend image
         run: docker build -f infra/Dockerfile.backend -t financecoach-backend:ci backend/
-
-  deploy:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [docker-build]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - name: Trigger Render deploy
-        run: |
-          curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" | \
-            python3 -c "import sys,json; d=json.load(sys.stdin); \
-              print('Deploy triggered:', d.get('deploy',{}).get('id','unknown'))"
-
-      - name: Trigger Vercel deploy
-        run: |
-          curl -s -X POST \
-            -H "Authorization: Bearer ${{ secrets.VERCEL_TOKEN }}" \
-            "https://api.vercel.com/v1/integrations/deploy/${{ secrets.VERCEL_DEPLOY_HOOK_ID }}"

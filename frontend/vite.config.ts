@@ -1,15 +1,9 @@
-import path from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
   plugins: [
     react(),
     VitePWA({
@@ -19,8 +13,8 @@ export default defineConfig({
         name: 'Finlo — Personal Expense Tracker',
         short_name: 'Finlo',
         description: 'AI-powered personal expense tracker with OCR, budgets, and smart insights',
-        theme_color: '#080f18',
-        background_color: '#080f18',
+        theme_color: '#0d0d12',
+        background_color: '#0d0d12',
         display: 'standalone',
         start_url: '/',
         icons: [

@@ -40,48 +40,26 @@ class BudgetsViewModel @Inject constructor(private val api: FinloApi) : ViewMode
     val budgets = _budgets.asStateFlow()
     private val _loading = MutableStateFlow(true)
     val loading = _loading.asStateFlow()
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage = _errorMessage.asStateFlow()
-
-    fun clearError() {
-        _errorMessage.value = null
-    }
 
     init { load() }
 
     fun load() {
         viewModelScope.launch {
             _loading.value = true
-            try {
-                _budgets.value = api.getBudgets().items
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to load budgets. Check your connection and try again."
-            }
+            try { _budgets.value = api.getBudgets().items } catch (_: Exception) {}
             _loading.value = false
         }
     }
 
-    fun create(req: BudgetCreateRequest, onResult: (Boolean) -> Unit) {
+    fun create(req: BudgetCreateRequest, onDone: () -> Unit) {
         viewModelScope.launch {
-            try {
-                api.createBudget(req)
-                load()
-                onResult(true)
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to create budget."
-                onResult(false)
-            }
+            try { api.createBudget(req); load(); onDone() } catch (_: Exception) {}
         }
     }
 
     fun delete(id: String) {
         viewModelScope.launch {
-            try {
-                api.deleteBudget(id)
-                load()
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to delete budget."
-            }
+            try { api.deleteBudget(id); load() } catch (_: Exception) {}
         }
     }
 }
@@ -96,7 +74,6 @@ private val MONTHS = listOf(
 fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
     val budgets by viewModel.budgets.collectAsState()
     val loading by viewModel.loading.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
     var showForm by remember { mutableStateOf(false) }
 
     val totalBudgeted = budgets.sumOf { it.limitAmount }
@@ -111,18 +88,6 @@ fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
                 Text("Set spending limits and track progress", style = MaterialTheme.typography.bodySmall, color = Muted)
             }
             PrimaryButton("+ New", onClick = { showForm = true }, icon = Icons.Default.Add)
-        }
-
-        errorMessage?.let { msg ->
-            Spacer(Modifier.height(10.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(msg, color = Danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                TextButton(onClick = { viewModel.clearError() }) { Text("Dismiss", fontSize = 12.sp) }
-            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -208,15 +173,15 @@ fun BudgetsScreen(viewModel: BudgetsViewModel = hiltViewModel()) {
 
     // Create Dialog
     if (showForm) {
-        CreateBudgetDialog(onDismiss = { showForm = false; viewModel.clearError() }) { req, onResult ->
-            viewModel.create(req, onResult)
+        CreateBudgetDialog(onDismiss = { showForm = false }) { req ->
+            viewModel.create(req) { showForm = false }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CreateBudgetDialog(onDismiss: () -> Unit, onCreate: (BudgetCreateRequest, (Boolean) -> Unit) -> Unit) {
+private fun CreateBudgetDialog(onDismiss: () -> Unit, onCreate: (BudgetCreateRequest) -> Unit) {
     val categories = CategoryUtils.all.map { it.name }
     var category by remember { mutableStateOf(categories.first()) }
     var limitAmount by remember { mutableStateOf("5000") }
@@ -314,18 +279,13 @@ private fun CreateBudgetDialog(onDismiss: () -> Unit, onCreate: (BudgetCreateReq
                 text = if (saving) "Creating..." else "Create Budget",
                 onClick = {
                     saving = true
-                    onCreate(
-                        BudgetCreateRequest(
-                            category = category,
-                            limitAmount = limitAmount.toDoubleOrNull() ?: 5000.0,
-                            month = month,
-                            year = year.toIntOrNull() ?: now.year,
-                            rolloverEnabled = rollover,
-                        ),
-                    ) { success ->
-                        saving = false
-                        if (success) onDismiss()
-                    }
+                    onCreate(BudgetCreateRequest(
+                        category = category,
+                        limitAmount = limitAmount.toDoubleOrNull() ?: 5000.0,
+                        month = month,
+                        year = year.toIntOrNull() ?: now.year,
+                        rolloverEnabled = rollover,
+                    ))
                 },
                 enabled = !saving && limitAmount.toDoubleOrNull() != null,
                 modifier = Modifier.fillMaxWidth(),

@@ -19,7 +19,6 @@ data class DashboardUiState(
     val suggestions: List<SuggestionDto> = emptyList(),
     val upcomingBills: List<BillDto> = emptyList(),
     val timeframe: String = "month",
-    val error: String? = null,
 )
 
 @HiltViewModel
@@ -47,7 +46,7 @@ class DashboardViewModel @Inject constructor(private val api: FinloApi) : ViewMo
                     upcomingBills = bills.take(5),
                 )
             } catch (e: Exception) {
-                _state.value = _state.value.copy(loading = false, error = "Failed to load dashboard data. Pull down to retry.")
+                _state.value = _state.value.copy(loading = false)
             }
         }
     }

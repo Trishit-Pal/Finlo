@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
-
 class FeedbackCreate(BaseModel):
     rating: Optional[int] = Field(None, ge=1, le=5)
     text: Optional[str] = Field(None, max_length=5000)
@@ -44,13 +43,8 @@ class AnalyticsOut(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-
-@router.post(
-    "/feedback", response_model=FeedbackOut, status_code=status.HTTP_201_CREATED
-)
-async def create_feedback(
-    body: FeedbackCreate, current_user: CurrentUser, db: DB
-) -> FeedbackOut:
+@router.post("/feedback", response_model=FeedbackOut, status_code=status.HTTP_201_CREATED)
+async def create_feedback(body: FeedbackCreate, current_user: CurrentUser, db: DB) -> FeedbackOut:
     """Collect in-app feedback and run the classification pipeline."""
     feedback = Feedback(
         user_id=current_user.id,
@@ -66,9 +60,7 @@ async def create_feedback(
 
     # Classify asynchronously (best-effort)
     try:
-        result = await classify_feedback(
-            body.text or "", body.feature_request or "", rating=body.rating
-        )
+        result = await classify_feedback(body.text or "", body.feature_request or "", rating=body.rating)
         feedback.classification = result.get("classification")
         feedback.top_improvements = result.get("top_improvements", [])
         feedback.priority = result.get("priority")
@@ -76,9 +68,7 @@ async def create_feedback(
         db.add(feedback)
         await db.flush()
     except Exception as exc:
-        logger.warning(
-            "Feedback classification failed for feedback_id=%s: %s", feedback.id, exc
-        )
+        logger.warning("Feedback classification failed for feedback_id=%s: %s", feedback.id, exc)
 
     return FeedbackOut(
         feedback_id=feedback.id,
@@ -93,41 +83,26 @@ async def admin_analytics(admin: AdminUser, db: DB) -> AnalyticsOut:
     # Correction rate: receipts with status "confirmed" whose items were edited
     # Approximated as ratio of confirmed receipts to total
     total_receipts = (await db.execute(select(func.count(Receipt.id)))).scalar_one()
-    confirmed_query = select(func.count(Receipt.id)).where(
-        Receipt.status == "confirmed"
-    )
+    confirmed_query = select(func.count(Receipt.id)).where(Receipt.status == "confirmed")
     confirmed_receipts = (await db.execute(confirmed_query)).scalar_one()
-    correction_rate = round(
-        (confirmed_receipts / total_receipts * 100) if total_receipts else 0.0, 1
-    )
+    correction_rate = round((confirmed_receipts / total_receipts * 100) if total_receipts else 0.0, 1)
 
     # Suggestion acceptance rate
-    total_responded_query = select(func.count(Suggestion.id)).where(
-        Suggestion.status != "pending"
-    )
+    total_responded_query = select(func.count(Suggestion.id)).where(Suggestion.status != "pending")
     total_responded = (await db.execute(total_responded_query)).scalar_one()
-    accepted_query = select(func.count(Suggestion.id)).where(
-        Suggestion.status == "accepted"
-    )
+    accepted_query = select(func.count(Suggestion.id)).where(Suggestion.status == "accepted")
     accepted = (await db.execute(accepted_query)).scalar_one()
-    acceptance_rate = round(
-        (accepted / total_responded * 100) if total_responded else 0.0, 1
-    )
+    acceptance_rate = round((accepted / total_responded * 100) if total_responded else 0.0, 1)
 
     # DAU (distinct users with a transaction today)
     from datetime import date
-
     today = date.today().isoformat()
-    dau_query = select(func.count(func.distinct(Transaction.user_id))).where(
-        Transaction.date == today
-    )
+    dau_query = select(func.count(func.distinct(Transaction.user_id))).where(Transaction.date == today)
     dau = (await db.execute(dau_query)).scalar_one()
 
     # Feedback stats
     feedback_vol = (await db.execute(select(func.count(Feedback.id)))).scalar_one()
-    fb_by_class_select = select(
-        Feedback.classification, func.count(Feedback.id)
-    ).group_by(Feedback.classification)
+    fb_by_class_select = select(Feedback.classification, func.count(Feedback.id)).group_by(Feedback.classification)
     fb_by_class_rows = await db.execute(fb_by_class_select)
     fb_by_class = {r.classification or "unclassified": r[1] for r in fb_by_class_rows}
 

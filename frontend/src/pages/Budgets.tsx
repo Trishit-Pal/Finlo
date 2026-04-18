@@ -1,64 +1,16 @@
-import React, { useEffect, useState } from "react";
-import { api } from "@/services/api";
-import type { Budget } from "@/types";
-import {
-  PiggyBank,
-  Plus,
-  Trash2,
-  Target,
-  TrendingDown,
-  AlertTriangle,
-  Edit3,
-  History,
-  Save,
-  Ban,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import clsx from "clsx";
+import React, { useEffect, useState } from 'react';
+import { api } from '../services/api';
+import type { Budget } from '../types';
+import { PiggyBank, Plus, Trash2, Target, TrendingDown, AlertTriangle, X, Edit3, History, Save, Ban } from 'lucide-react';
 
 const CATEGORIES = [
-  "Food & Dining",
-  "Groceries",
-  "Transport",
-  "Entertainment",
-  "Shopping",
-  "Healthcare",
-  "Utilities",
-  "Travel",
-  "Education",
-  "Other",
+  'Food & Dining', 'Groceries', 'Transport', 'Entertainment',
+  'Shopping', 'Healthcare', 'Utilities', 'Travel', 'Education', 'Other',
 ];
 
 const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 interface NewBudget {
@@ -88,7 +40,7 @@ export const Budgets: React.FC = () => {
   const [historyBudget, setHistoryBudget] = useState<Budget | null>(null);
   const [historyItems, setHistoryItems] = useState<BudgetHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   const now = new Date();
@@ -110,7 +62,7 @@ export const Budgets: React.FC = () => {
 
   const fetchBudgets = async () => {
     try {
-      const res = await api.get("/budgets");
+      const res = await api.get('/budgets');
       setBudgets(res.data?.items || []);
     } catch (e) {
       console.error(e);
@@ -119,24 +71,21 @@ export const Budgets: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchBudgets();
-  }, []);
+  useEffect(() => { fetchBudgets(); }, []);
 
   const handleCreate = async () => {
     if (!form.category || form.limit_amount <= 0) {
-      setError("Please fill in all fields correctly.");
+      setError('Please fill in all fields correctly.');
       return;
     }
     setSaving(true);
-    setError("");
+    setError('');
     try {
-      await api.post("/budgets", form);
+      await api.post('/budgets', form);
       setShowForm(false);
       await fetchBudgets();
-    } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } };
-      setError(err.response?.data?.detail || "Failed to create budget.");
+    } catch (e: any) {
+      setError(e.response?.data?.detail || 'Failed to create budget.');
     } finally {
       setSaving(false);
     }
@@ -145,10 +94,8 @@ export const Budgets: React.FC = () => {
   const handleDelete = async (id: string) => {
     try {
       await api.delete(`/budgets/${id}`);
-      setBudgets((prev) => prev.filter((b) => b.id !== id));
-    } catch (e) {
-      console.error(e);
-    }
+      setBudgets(prev => prev.filter(b => b.id !== id));
+    } catch (e) { console.error(e); }
   };
 
   const openEdit = (budget: Budget) => {
@@ -160,14 +107,14 @@ export const Budgets: React.FC = () => {
       rollover_enabled: budget.rollover_enabled,
       is_percentage: budget.is_percentage,
     });
-    setError("");
+    setError('');
     setShowEditForm(true);
   };
 
   const handleEditSave = async () => {
     if (!editingBudget) return;
     if (editForm.limit_amount <= 0) {
-      setError("Limit amount must be greater than 0.");
+      setError('Limit amount must be greater than 0.');
       return;
     }
     setSaving(true);
@@ -176,15 +123,8 @@ export const Budgets: React.FC = () => {
       setShowEditForm(false);
       setEditingBudget(null);
       await fetchBudgets();
-    } catch (e: unknown) {
-      const err = e as {
-        response?: { data?: { detail?: string; message?: string } };
-      };
-      setError(
-        err?.response?.data?.detail ||
-          err?.response?.data?.message ||
-          "Failed to update budget.",
-      );
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || e?.response?.data?.message || 'Failed to update budget.');
     } finally {
       setSaving(false);
     }
@@ -205,559 +145,363 @@ export const Budgets: React.FC = () => {
     }
   };
 
+  const getBarColor = (level: string) => {
+    if (level === 'hard') return { bar: '#f43f5e', glow: 'rgba(244,63,94,0.3)' };
+    if (level === 'soft') return { bar: '#f59e0b', glow: 'rgba(245,158,11,0.3)' };
+    return { bar: '#10b981', glow: 'rgba(16,185,129,0.3)' };
+  };
+
   const totalBudgeted = budgets.reduce((a, b) => a + b.limit_amount, 0);
   const totalSpent = budgets.reduce((a, b) => a + (b.spent || 0), 0);
-  const overBudget = budgets.filter((b) => b.alert_level === "hard").length;
+  const overBudget = budgets.filter(b => b.alert_level === 'hard').length;
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Budgets</h1>
-          <p className="text-sm mt-0.5 text-muted-foreground">
+          <p className="text-sm mt-0.5 text-muted">
             Set spending limits and track your progress
           </p>
         </div>
-        <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}>
+        <button
+          onClick={() => setShowForm(true)}
+          className="btn-primary flex items-center gap-2 text-sm"
+        >
           <Plus size={15} />
           New Budget
-        </Button>
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Summary Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {[
-          {
-            label: "Total Budgeted",
-            value: `₹${totalBudgeted.toLocaleString("en-IN")}`,
-            icon: Target,
-            colorClass: "bg-primary/10 text-primary border-primary/20",
-          },
-          {
-            label: "Total Spent",
-            value: `₹${totalSpent.toLocaleString("en-IN")}`,
-            icon: TrendingDown,
-            colorClass: "bg-warning/10 text-warning border-warning/20",
-          },
-          {
-            label: "Over Budget",
-            value: overBudget,
-            icon: AlertTriangle,
-            colorClass:
-              overBudget > 0
-                ? "bg-destructive/10 text-destructive border-destructive/20"
-                : "bg-success/10 text-success border-success/20",
-          },
-        ].map(({ label, value, icon: Icon, colorClass }) => (
-          <Card
-            key={label}
-            className="glass-card border-border/40 hover:border-primary/20 transition-all duration-300"
-          >
-            <CardContent className="p-5 flex items-center gap-4">
-              <div
-                className={clsx(
-                  "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border",
-                  colorClass,
-                )}
-              >
-                <Icon size={18} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground tracking-tight">
-                  {loading ? "—" : value}
-                </p>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-0.5">
-                  {label}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          { label: 'Total Budgeted', value: `₹${totalBudgeted.toLocaleString('en-IN')}`, icon: Target, color: '#818cf8' },
+          { label: 'Total Spent', value: `₹${totalSpent.toLocaleString('en-IN')}`, icon: TrendingDown, color: '#fbbf24' },
+          { label: 'Over Budget', value: overBudget, icon: AlertTriangle, color: overBudget > 0 ? '#fb7185' : '#34d399' },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="glass-panel p-4 flex items-center gap-3">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: `${color}18`, border: `1px solid ${color}30` }}
+            >
+              <Icon size={15} style={{ color }} />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-foreground">{loading ? '—' : value}</p>
+              <p className="text-xs text-muted">{label}</p>
+            </div>
+          </div>
         ))}
       </div>
 
-      <Dialog
-        open={showForm}
-        onOpenChange={(o) => {
-          setShowForm(o);
-          if (!o) setError("");
-        }}
-      >
-        <DialogContent className="max-w-md sm:max-w-lg glass-card border-border/40 text-foreground">
-          <DialogHeader>
-            <DialogTitle className="text-xl">Create Budget</DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-5">
-            {error ? (
-              <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive flex gap-2 items-center">
-                <AlertTriangle size={16} />
+      {/* Create Form Modal */}
+      {showForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowForm(false); }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl p-6 animate-slide-up"
+            style={{
+              background: '#13131a',
+              border: '1px solid rgba(255,255,255,0.09)',
+              boxShadow: '0 32px 64px rgba(0,0,0,0.6)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-semibold text-foreground">Create Budget</h2>
+              <button
+                onClick={() => setShowForm(false)}
+                className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-white/5 transition-all"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {error && (
+              <div
+                className="mb-4 p-3 rounded-xl text-sm"
+                style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)', color: '#fb7185' }}
+              >
                 {error}
               </div>
-            ) : null}
+            )}
+
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Category</Label>
-                <Select
+              <div>
+                <label className="label-text">Category</label>
+                <select
                   value={form.category}
-                  onValueChange={(v) => setForm((p) => ({ ...p, category: v }))}
+                  onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                  className="input-field"
                 >
-                  <SelectTrigger className="glass-panel">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="glass-panel">
-                    {CATEGORIES.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="budget-limit">Monthly Limit (₹)</Label>
-                <Input
-                  id="budget-limit"
+              <div>
+                <label className="label-text">Monthly Limit (₹)</label>
+                <input
                   type="number"
                   min={1}
-                  className="glass-panel"
-                  value={form.limit_amount || ""}
-                  onChange={(e) =>
-                    setForm((p) => ({
-                      ...p,
-                      limit_amount: Number(e.target.value),
-                    }))
-                  }
+                  value={form.limit_amount}
+                  onChange={e => setForm(p => ({ ...p, limit_amount: Number(e.target.value) }))}
+                  className="input-field"
                   placeholder="5000"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Month</Label>
-                  <Select
-                    value={String(form.month)}
-                    onValueChange={(v) =>
-                      setForm((p) => ({ ...p, month: Number(v) }))
-                    }
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-text">Month</label>
+                  <select
+                    value={form.month}
+                    onChange={e => setForm(p => ({ ...p, month: Number(e.target.value) }))}
+                    className="input-field"
                   >
-                    <SelectTrigger className="glass-panel">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="glass-panel">
-                      {MONTHS.map((m, i) => (
-                        <SelectItem key={m} value={String(i + 1)}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                  </select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="budget-year">Year</Label>
-                  <Input
-                    id="budget-year"
+                <div>
+                  <label className="label-text">Year</label>
+                  <input
                     type="number"
-                    className="glass-panel"
                     value={form.year}
-                    onChange={(e) =>
-                      setForm((p) => ({ ...p, year: Number(e.target.value) }))
-                    }
+                    onChange={e => setForm(p => ({ ...p, year: Number(e.target.value) }))}
+                    className="input-field"
                   />
                 </div>
               </div>
             </div>
-            <label className="flex items-center gap-2.5 text-sm text-foreground cursor-pointer font-medium p-3 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/40 transition-colors">
-              <input
-                type="checkbox"
-                checked={form.rollover_enabled}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, rollover_enabled: e.target.checked }))
-                }
-                className="w-4 h-4 rounded text-primary focus:ring-primary border-muted-foreground bg-transparent"
-              />
-              Rollover unused budget
-            </label>
-          </div>
-          <div className="flex gap-3 pt-4 border-t border-border/40">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={() => setShowForm(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="flex-1 gap-2"
-              disabled={saving}
-              onClick={handleCreate}
-            >
-              {saving ? "Creating..." : "Create Budget"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog
-        open={showEditForm && !!editingBudget}
-        onOpenChange={(o) => {
-          setShowEditForm(o);
-          if (!o) {
-            setEditingBudget(null);
-            setError("");
-          }
-        }}
-      >
-        <DialogContent className="max-w-md sm:max-w-lg glass-card border-border/40 text-foreground">
-          <DialogHeader>
-            <DialogTitle className="text-xl">
-              Edit Budget (one-time monthly)
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-5">
-            {error ? (
-              <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive flex gap-2 items-center">
-                <AlertTriangle size={16} />
+            <div className="flex items-center gap-4 mt-2">
+              <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
+                <input type="checkbox" checked={form.rollover_enabled} onChange={e => setForm(p => ({ ...p, rollover_enabled: e.target.checked }))} className="rounded" />
+                Rollover unused budget
+              </label>
+            </div>
+
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setShowForm(false)} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={handleCreate} disabled={saving} className="btn-primary flex-1">
+                {saving ? 'Creating...' : 'Create Budget'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEditForm && editingBudget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowEditForm(false); }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl p-6 animate-slide-up"
+            style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.09)' }}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-semibold text-foreground">Edit Budget (one-time monthly)</h2>
+              <button onClick={() => setShowEditForm(false)} className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-white/5">
+                <X size={16} />
+              </button>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 rounded-xl text-sm" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)', color: '#fb7185' }}>
                 {error}
               </div>
-            ) : null}
+            )}
+
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-limit">Monthly Limit (₹)</Label>
-                <Input
-                  id="edit-limit"
+              <div>
+                <label className="label-text">Monthly Limit (₹)</label>
+                <input
                   type="number"
                   min={1}
-                  className="glass-panel"
-                  value={editForm.limit_amount || ""}
-                  onChange={(e) =>
-                    setEditForm((p) => ({
-                      ...p,
-                      limit_amount: Number(e.target.value),
-                    }))
-                  }
+                  value={editForm.limit_amount}
+                  onChange={e => setEditForm((p) => ({ ...p, limit_amount: Number(e.target.value) }))}
+                  className="input-field"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="soft-alert">Soft Alert (0-1)</Label>
-                  <Input
-                    id="soft-alert"
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-text">Soft Alert (0-1)</label>
+                  <input
                     type="number"
                     min={0}
                     max={1}
                     step={0.05}
-                    className="glass-panel"
                     value={editForm.soft_alert}
-                    onChange={(e) =>
-                      setEditForm((p) => ({
-                        ...p,
-                        soft_alert: Number(e.target.value),
-                      }))
-                    }
+                    onChange={e => setEditForm((p) => ({ ...p, soft_alert: Number(e.target.value) }))}
+                    className="input-field"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hard-alert">Hard Alert (0-1)</Label>
-                  <Input
-                    id="hard-alert"
+                <div>
+                  <label className="label-text">Hard Alert (0-1)</label>
+                  <input
                     type="number"
                     min={0}
                     max={1}
                     step={0.05}
-                    className="glass-panel"
                     value={editForm.hard_alert}
-                    onChange={(e) =>
-                      setEditForm((p) => ({
-                        ...p,
-                        hard_alert: Number(e.target.value),
-                      }))
-                    }
+                    onChange={e => setEditForm((p) => ({ ...p, hard_alert: Number(e.target.value) }))}
+                    className="input-field"
                   />
                 </div>
               </div>
+              <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
+                <input type="checkbox" checked={editForm.rollover_enabled} onChange={e => setEditForm((p) => ({ ...p, rollover_enabled: e.target.checked }))} className="rounded" />
+                Rollover unused budget
+              </label>
+              <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
+                <input type="checkbox" checked={editForm.is_percentage} onChange={e => setEditForm((p) => ({ ...p, is_percentage: e.target.checked }))} className="rounded" />
+                Limit is percentage based
+              </label>
+            </div>
 
-              <div className="space-y-2 pt-2">
-                <label className="flex items-center gap-2.5 text-sm text-foreground cursor-pointer font-medium p-3 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/40 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={editForm.rollover_enabled}
-                    onChange={(e) =>
-                      setEditForm((p) => ({
-                        ...p,
-                        rollover_enabled: e.target.checked,
-                      }))
-                    }
-                    className="w-4 h-4 rounded text-primary focus:ring-primary border-muted-foreground bg-transparent"
-                  />
-                  Rollover unused budget
-                </label>
-                <label className="flex items-center gap-2.5 text-sm text-foreground cursor-pointer font-medium p-3 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/40 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={editForm.is_percentage}
-                    onChange={(e) =>
-                      setEditForm((p) => ({
-                        ...p,
-                        is_percentage: e.target.checked,
-                      }))
-                    }
-                    className="w-4 h-4 rounded text-primary focus:ring-primary border-muted-foreground bg-transparent"
-                  />
-                  Limit is percentage based
-                </label>
-              </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setShowEditForm(false)} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={handleEditSave} disabled={saving} className="btn-primary flex-1 flex items-center justify-center gap-1.5">
+                <Save size={13} />
+                {saving ? 'Saving...' : 'Save one-time edit'}
+              </button>
             </div>
           </div>
-          <div className="flex gap-3 pt-4 border-t border-border/40">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={() => setShowEditForm(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="flex-1 gap-1.5"
-              disabled={saving}
-              onClick={handleEditSave}
-            >
-              <Save size={16} />
-              {saving ? "Saving..." : "Save one-time edit"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
-      <Dialog
-        open={showHistory && !!historyBudget}
-        onOpenChange={(o) => {
-          setShowHistory(o);
-          if (!o) setHistoryBudget(null);
-        }}
-      >
-        <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto glass-card border-border/40 text-foreground">
-          <DialogHeader>
-            <DialogTitle className="text-xl">
-              Budget History ·{" "}
-              <span className="text-primary">{historyBudget?.category}</span>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-2">
+      {showHistory && historyBudget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowHistory(false); }}
+        >
+          <div className="w-full max-w-xl rounded-2xl p-6 animate-slide-up max-h-[85vh] overflow-y-auto" style={{ background: '#13131a', border: '1px solid rgba(255,255,255,0.09)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-foreground">Budget History · {historyBudget.category}</h2>
+              <button onClick={() => setShowHistory(false)} className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-white/5">
+                <X size={16} />
+              </button>
+            </div>
             {historyLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((idx) => (
-                  <Skeleton key={idx} className="h-16 w-full rounded-xl" />
-                ))}
-              </div>
+              <div className="space-y-2">{[1, 2, 3].map((idx) => <div key={idx} className="skeleton h-14 rounded-xl" />)}</div>
             ) : historyItems.length === 0 ? (
-              <div className="text-center py-8 border border-dashed border-border/60 rounded-xl bg-muted/10">
-                <p className="text-sm text-muted-foreground font-medium">
-                  No history available.
-                </p>
-              </div>
+              <p className="text-sm text-muted">No history available.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {historyItems.map((entry) => (
-                  <Card
-                    key={entry.id}
-                    className="border-border/40 bg-background/50 hover:bg-background transition-colors"
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-semibold text-foreground">
-                          Version {entry.version}
-                        </p>
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {new Date(entry.created_at).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-sm mt-1 text-muted-foreground">
-                        Reason: {entry.change_reason}
-                      </p>
-                    </CardContent>
-                  </Card>
+                  <div key={entry.id} className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-foreground">Version {entry.version}</p>
+                      <span className="text-xs text-muted">{new Date(entry.created_at).toLocaleString()}</span>
+                    </div>
+                    <p className="text-xs mt-1 text-muted">Reason: {entry.change_reason}</p>
+                  </div>
                 ))}
               </div>
             )}
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
+      {/* Budget Cards */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="glass-card border-border/40">
-              <CardContent className="p-5 space-y-4">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-2">
-                    <Skeleton className="h-5 w-32" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                  <Skeleton className="h-8 w-24 rounded-lg" />
-                </div>
-                <div className="space-y-2 mt-4">
-                  <div className="flex justify-between">
-                    <Skeleton className="h-3 w-16" />
-                    <Skeleton className="h-3 w-16" />
-                  </div>
-                  <Skeleton className="h-2.5 w-full rounded-full" />
-                </div>
-              </CardContent>
-            </Card>
+            <div key={i} className="glass-panel p-5 space-y-4">
+              <div className="flex justify-between">
+                <div className="skeleton h-4 w-32 rounded" />
+                <div className="skeleton h-4 w-16 rounded" />
+              </div>
+              <div className="skeleton h-2 w-full rounded-full" />
+            </div>
           ))}
         </div>
       ) : budgets.length === 0 ? (
-        <Card className="glass-card border-border/40 border-dashed bg-transparent shadow-none">
-          <CardContent className="p-12 text-center">
-            <div className="w-16 h-16 rounded-full bg-muted/30 flex items-center justify-center mx-auto mb-4 border border-border/40">
-              <PiggyBank size={32} className="text-muted-foreground/60" />
-            </div>
-            <p className="text-base font-semibold text-foreground mb-1">
-              No budgets yet.
-            </p>
-            <p className="text-sm text-muted-foreground mb-6">
-              Create one to start tracking your spending.
-            </p>
-            <Button
-              className="gap-2 mx-auto"
-              onClick={() => setShowForm(true)}
-              size="lg"
-            >
-              <Plus size={16} /> Create First Budget
-            </Button>
-          </CardContent>
-        </Card>
+        <div
+          className="glass-panel p-12 text-center"
+          style={{ borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.07)' }}
+        >
+          <PiggyBank size={32} className="mx-auto mb-3 opacity-20 text-muted" />
+          <p className="text-sm text-muted mb-4">No budgets yet. Create one to start tracking your spending.</p>
+          <button onClick={() => setShowForm(true)} className="btn-primary text-sm flex items-center gap-2 mx-auto">
+            <Plus size={14} /> Create First Budget
+          </button>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {budgets.map((b) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {budgets.map(b => {
             const pct = Math.min(((b.spent || 0) / b.limit_amount) * 100, 100);
-            const isHard = b.alert_level === "hard";
-            const isSoft = b.alert_level === "soft";
-            const colorClass = isHard
-              ? "bg-destructive shadow-[0_0_10px_hsl(var(--destructive)/0.3)]"
-              : isSoft
-                ? "bg-warning shadow-[0_0_10px_hsl(var(--warning)/0.3)]"
-                : "bg-success shadow-[0_0_10px_hsl(var(--success)/0.3)]";
-            const badgeClass = isHard
-              ? "bg-destructive/10 text-destructive border-destructive/20"
-              : isSoft
-                ? "bg-warning/10 text-warning border-warning/20"
-                : "bg-success/10 text-success border-success/20";
-
+            const { bar, glow } = getBarColor(b.alert_level);
             return (
-              <Card
-                key={b.id}
-                className="glass-card border-border/40 group hover:-translate-y-1 hover:border-primary/20 hover:shadow-md transition-all duration-300"
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-5">
-                    <div>
-                      <p className="font-bold text-base text-foreground mb-1 flex items-center gap-2">
-                        {b.category}
-                        {b.alert_level === "hard" && (
-                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-destructive/10 text-destructive border border-destructive/20">
-                            Over Budget
-                          </span>
-                        )}
-                        {b.alert_level === "soft" && (
-                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-warning/10 text-warning border border-warning/20">
-                            80% Used
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs font-medium text-muted-foreground">
-                        {MONTHS[b.month - 1]} {b.year} · Version {b.version}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                        onClick={() => openHistory(b)}
-                        title="Version history"
-                      >
-                        <History size={16} />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className={clsx(
-                          "h-8 w-8",
-                          b.can_edit
-                            ? "text-muted-foreground hover:text-warning hover:bg-warning/10"
-                            : "text-muted-foreground/30",
-                        )}
-                        disabled={!b.can_edit}
-                        onClick={() => openEdit(b)}
-                        title={
-                          b.can_edit
-                            ? "Edit budget"
-                            : "Monthly edit already used"
-                        }
-                      >
-                        {b.can_edit ? <Edit3 size={16} /> : <Ban size={16} />}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => handleDelete(b.id)}
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="mb-4">
-                    <div className="flex justify-between items-baseline mb-2">
-                      <span className="text-foreground font-bold text-lg">
-                        ₹{(b.spent || 0).toLocaleString("en-IN")}{" "}
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest ml-1">
-                          spent
-                        </span>
-                      </span>
-                      <span className="text-sm font-semibold text-muted-foreground">
-                        of ₹{b.limit_amount.toLocaleString("en-IN")}
-                      </span>
-                    </div>
-                    <div className="h-2.5 w-full rounded-full bg-secondary overflow-hidden">
-                      <div
-                        className={clsx(
-                          "h-full rounded-full transition-all duration-1000 ease-out",
-                          colorClass,
-                        )}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center text-xs font-medium pt-1">
-                    <span className="text-muted-foreground uppercase tracking-wider">
-                      {pct.toFixed(0)}% used
-                    </span>
-                    <span
-                      className={clsx(
-                        "px-2 py-1 rounded-md border",
-                        badgeClass,
-                      )}
-                    >
-                      {b.remaining < 0
-                        ? `₹${Math.abs(b.remaining).toLocaleString("en-IN")} over`
-                        : `₹${(b.remaining || 0).toLocaleString("en-IN")} left`}
-                    </span>
-                  </div>
-                  {!b.can_edit && (
-                    <p className="text-xs font-medium mt-3 text-warning">
-                      Edit limit reached for this month.
+              <div key={b.id} className="glass-panel p-5 group hover:-translate-y-0.5 transition-all duration-300">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <p className="font-semibold text-sm text-foreground">{b.category}</p>
+                    <p className="text-xs text-muted mt-0.5">
+                      {MONTHS[b.month - 1]} {b.year}
                     </p>
-                  )}
-                </CardContent>
-              </Card>
+                    <p className="text-xs text-muted mt-1">Version {b.version} · {b.edit_count}/1 edit used</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {b.alert_level === 'hard' && (
+                      <span className="badge-danger text-xs">Over Budget</span>
+                    )}
+                    {b.alert_level === 'soft' && (
+                      <span className="badge-warning text-xs">80% Used</span>
+                    )}
+                    <button
+                      onClick={() => openHistory(b)}
+                      className="p-1.5 rounded-lg text-muted sm:opacity-0 sm:group-hover:opacity-100 hover:text-foreground hover:bg-white/10 transition-all"
+                      title="Version history"
+                    >
+                      <History size={13} />
+                    </button>
+                    <button
+                      onClick={() => openEdit(b)}
+                      disabled={!b.can_edit}
+                      className="p-1.5 rounded-lg text-muted sm:opacity-0 sm:group-hover:opacity-100 hover:text-primary hover:bg-primary/10 transition-all disabled:opacity-35 disabled:cursor-not-allowed"
+                      title={b.can_edit ? 'Edit budget' : 'Monthly edit already used'}
+                    >
+                      {b.can_edit ? <Edit3 size={13} /> : <Ban size={13} />}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(b.id)}
+                      className="p-1.5 rounded-lg text-muted sm:opacity-0 sm:group-hover:opacity-100 hover:text-danger hover:bg-danger/10 transition-all"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className="text-foreground font-medium">₹{(b.spent || 0).toLocaleString('en-IN')} spent</span>
+                    <span className="text-muted">of ₹{b.limit_amount.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="progress-bar">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${pct}%`, background: bar, boxShadow: `0 0 8px ${glow}` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center text-xs text-muted">
+                  <span>{pct.toFixed(0)}% used</span>
+                  <span style={{ color: b.remaining < 0 ? '#fb7185' : '#34d399' }}>
+                    {b.remaining < 0 ? `₹${Math.abs(b.remaining).toLocaleString('en-IN')} over` : `₹${(b.remaining || 0).toLocaleString('en-IN')} left`}
+                  </span>
+                </div>
+                {!b.can_edit && (
+                  <p className="text-xs mt-2" style={{ color: '#fbbf24' }}>
+                    Edit limit reached for this month.
+                  </p>
+                )}
+              </div>
             );
           })}
         </div>

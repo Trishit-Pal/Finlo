@@ -1,67 +1,44 @@
-import React, { useEffect, useState } from "react";
-import { api } from "@/services/api";
-import type { SavingsGoal } from "@/types";
-import { Plus, Trash2, Target, PiggyBank, TrendingUp } from "lucide-react";
-import { format, differenceInDays, parseISO } from "date-fns";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import clsx from "clsx";
+import React, { useEffect, useState } from 'react';
+import { api } from '../services/api';
+import type { SavingsGoal } from '../types';
+import { Plus, X, Trash2, Target, PiggyBank, TrendingUp } from 'lucide-react';
+import { format, differenceInDays, parseISO } from 'date-fns';
 
 export const SavingsGoals: React.FC = () => {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [contributeModal, setContributeModal] = useState<string | null>(null);
-  const [contributeAmount, setContributeAmount] = useState("");
-  const [form, setForm] = useState({
-    name: "",
-    target_amount: "",
-    deadline: "",
-  });
+  const [contributeAmount, setContributeAmount] = useState('');
+  const [form, setForm] = useState({ name: '', target_amount: '', deadline: '' });
 
   const fetch = async () => {
     try {
-      const res = await api.get("/savings");
+      const res = await api.get('/savings');
       setGoals(res.data || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    fetch();
-  }, []);
+  useEffect(() => { fetch(); }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api.post("/savings", {
+    await api.post('/savings', {
       name: form.name,
       target_amount: parseFloat(form.target_amount),
       deadline: form.deadline || null,
     });
     setShowModal(false);
-    setForm({ name: "", target_amount: "", deadline: "" });
+    setForm({ name: '', target_amount: '', deadline: '' });
     fetch();
   };
 
   const handleContribute = async () => {
     if (!contributeModal || !contributeAmount) return;
-    await api.post(`/savings/${contributeModal}/contribute`, {
-      amount: parseFloat(contributeAmount),
-    });
+    await api.post(`/savings/${contributeModal}/contribute`, { amount: parseFloat(contributeAmount) });
     setContributeModal(null);
-    setContributeAmount("");
+    setContributeAmount('');
     fetch();
   };
 
@@ -70,364 +47,151 @@ export const SavingsGoals: React.FC = () => {
     fetch();
   };
 
-  const fmt = (n: number) =>
-    `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
+  const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
 
   const totalTarget = goals.reduce((s, g) => s + g.target_amount, 0);
   const totalSaved = goals.reduce((s, g) => s + g.current_amount, 0);
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Savings Goals</h1>
-          <p className="text-sm mt-0.5 text-muted-foreground">
-            Track your savings targets and progress
-          </p>
+          <p className="text-sm mt-0.5 text-muted">Track your savings targets and progress</p>
         </div>
-        <Button
-          size="sm"
-          className="gap-2 shadow-sm"
-          onClick={() => setShowModal(true)}
-        >
-          <Plus size={16} /> <span className="hidden sm:inline">New Goal</span>
-          <span className="sm:hidden">New</span>
-        </Button>
+        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2 text-sm">
+          <Plus size={15} /> New Goal
+        </button>
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {[
-          {
-            label: "Total Target",
-            value: fmt(totalTarget),
-            icon: Target,
-            colorClass: "text-primary bg-primary/10 border-primary/20",
-          },
-          {
-            label: "Total Saved",
-            value: fmt(totalSaved),
-            icon: PiggyBank,
-            colorClass: "text-success bg-success/10 border-success/20",
-          },
-          {
-            label: "Active Goals",
-            value: goals.length,
-            icon: TrendingUp,
-            colorClass: "text-warning bg-warning/10 border-warning/20",
-          },
-        ].map(({ label, value, icon: Icon, colorClass }) => (
-          <Card
-            key={label}
-            className="glass-card border-border/40 hover:border-primary/20 transition-all duration-300 shadow-sm"
-          >
-            <CardContent className="p-5 flex items-center gap-4">
-              <div
-                className={clsx(
-                  "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border",
-                  colorClass,
-                )}
-              >
-                <Icon size={18} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground tracking-tight">
-                  {loading ? "—" : value}
-                </p>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-0.5">
-                  {label}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          { label: 'Total Target', value: fmt(totalTarget), icon: Target, color: '#818cf8' },
+          { label: 'Total Saved', value: fmt(totalSaved), icon: PiggyBank, color: '#22c55e' },
+          { label: 'Active Goals', value: goals.length, icon: TrendingUp, color: '#f59e0b' },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="glass-panel p-4 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${color}18`, border: `1px solid ${color}30` }}>
+              <Icon size={15} style={{ color }} />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-foreground">{loading ? '—' : value}</p>
+              <p className="text-xs text-muted">{label}</p>
+            </div>
+          </div>
         ))}
       </div>
 
       {/* Create Modal */}
-      <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-md p-6 glass-card border-border/60 shadow-xl sm:rounded-2xl">
-          <DialogHeader className="mb-4">
-            <DialogTitle className="text-xl font-bold">
-              New Savings Goal
-            </DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-5">
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">Goal Name</Label>
-              <Input
-                className="glass-panel h-11"
-                value={form.name}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, name: e.target.value }))
-                }
-                placeholder="Emergency Fund, Vacation..."
-                required
-              />
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
+          <div className="w-full max-w-md rounded-2xl p-6 animate-slide-up" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-foreground">New Savings Goal</h2>
+              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg text-muted hover:text-foreground"><X size={16} /></button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">
-                  Target Amount (₹)
-                </Label>
-                <Input
-                  className="glass-panel h-11"
-                  type="number"
-                  min="1"
-                  value={form.target_amount}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, target_amount: e.target.value }))
-                  }
-                  required
-                />
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div>
+                <label className="label-text">Goal Name</label>
+                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="input-field" placeholder="Emergency Fund, Vacation..." required />
               </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">
-                  Deadline (optional)
-                </Label>
-                <Input
-                  className="glass-panel h-11"
-                  type="date"
-                  value={form.deadline}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, deadline: e.target.value }))
-                  }
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label-text">Target Amount (₹)</label>
+                  <input type="number" min="1" value={form.target_amount} onChange={e => setForm(f => ({ ...f, target_amount: e.target.value }))} className="input-field" required />
+                </div>
+                <div>
+                  <label className="label-text">Deadline (optional)</label>
+                  <input type="date" value={form.deadline} onChange={e => setForm(f => ({ ...f, deadline: e.target.value }))} className="input-field" />
+                </div>
               </div>
-            </div>
-            <div className="pt-2">
-              <Button
-                type="submit"
-                className="w-full h-11 text-base font-semibold shadow-md"
-              >
-                Create Goal
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+              <button type="submit" className="btn-primary w-full">Create Goal</button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Contribute Modal */}
-      <Dialog
-        open={!!contributeModal}
-        onOpenChange={(o) => {
-          if (!o) setContributeModal(null);
-        }}
-      >
-        <DialogContent className="max-w-sm p-6 glass-card border-border/60 shadow-xl sm:rounded-2xl">
-          <DialogHeader className="mb-4">
-            <DialogTitle className="text-xl font-bold">
-              Add Contribution
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">
-                Amount to Contribute
-              </Label>
-              <Input
-                className="glass-panel h-11 text-lg"
-                type="number"
-                min="1"
-                value={contributeAmount}
-                onChange={(e) => setContributeAmount(e.target.value)}
-                placeholder="₹0.00"
-                autoFocus
-              />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <Button
-                variant="outline"
-                className="flex-1 h-11 font-semibold glass-panel hover:bg-muted/50"
-                onClick={() => setContributeModal(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="flex-1 h-11 font-semibold shadow-md"
-                onClick={handleContribute}
-                disabled={
-                  !contributeAmount || parseFloat(contributeAmount) <= 0
-                }
-              >
-                Contribute
-              </Button>
+      {contributeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }} onClick={e => { if (e.target === e.currentTarget) setContributeModal(null); }}>
+          <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <h3 className="text-base font-semibold text-foreground mb-4">Add Contribution</h3>
+            <input type="number" min="1" value={contributeAmount} onChange={e => setContributeAmount(e.target.value)} placeholder="Amount (₹)" className="input-field mb-3" autoFocus />
+            <div className="flex gap-2">
+              <button onClick={() => setContributeModal(null)} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={handleContribute} className="btn-primary flex-1">Contribute</button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
       {/* Goals Grid */}
-      <div className="animate-scale-in">
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="glass-card border-border/40 shadow-sm">
-                <CardContent className="p-6 space-y-5">
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-2">
-                      <Skeleton className="h-5 w-32 rounded" />
-                      <Skeleton className="h-3 w-20 rounded" />
-                    </div>
-                    <Skeleton className="h-8 w-16 rounded-md" />
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2].map(i => <div key={i} className="glass-panel p-5 skeleton h-36 rounded-xl" />)}
+        </div>
+      ) : goals.length === 0 ? (
+        <div className="glass-panel p-12 text-center" style={{ borderStyle: 'dashed' }}>
+          <PiggyBank size={32} className="mx-auto mb-3 opacity-20 text-muted" />
+          <p className="text-sm text-muted">No savings goals yet. Set one to start saving!</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {goals.map(g => {
+            const pct = Math.min((g.current_amount / g.target_amount) * 100, 100);
+            const isComplete = g.current_amount >= g.target_amount;
+            const daysLeft = g.deadline ? differenceInDays(parseISO(g.deadline), new Date()) : null;
+            const dailyNeeded = daysLeft && daysLeft > 0 ? (g.target_amount - g.current_amount) / daysLeft : null;
+
+            return (
+              <div key={g.id} className="glass-panel p-5 group hover:-translate-y-0.5 transition-all duration-300">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{g.name}</p>
+                    <p className="text-xs text-muted mt-0.5">
+                      {g.deadline ? `Due ${format(parseISO(g.deadline), 'MMM d, yyyy')}` : 'No deadline'}
+                      {daysLeft !== null && daysLeft > 0 && ` · ${daysLeft} days left`}
+                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <Skeleton className="h-3 w-16 rounded" />
-                      <Skeleton className="h-3 w-16 rounded" />
-                    </div>
-                    <Skeleton className="h-2.5 w-full rounded-full" />
+                  <div className="flex items-center gap-1.5">
+                    {isComplete ? (
+                      <span className="badge-success text-xs">Complete!</span>
+                    ) : (
+                      <button onClick={() => setContributeModal(g.id)} className="text-xs px-2.5 py-1 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-all">+ Add</button>
+                    )}
+                    <button onClick={() => handleDelete(g.id)} className="p-1.5 rounded-lg text-muted sm:opacity-0 sm:group-hover:opacity-100 hover:text-danger hover:bg-danger/10"><Trash2 size={13} /></button>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : goals.length === 0 ? (
-          <Card className="glass-card border-border/40 border-dashed bg-transparent shadow-none">
-            <CardContent className="p-16 text-center">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4 border border-primary/20">
-                <PiggyBank size={32} className="text-primary/80" />
+                </div>
+
+                <div className="mb-3">
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className="text-foreground font-medium">{fmt(g.current_amount)} saved</span>
+                    <span className="text-muted">of {fmt(g.target_amount)}</span>
+                  </div>
+                  <div className="progress-bar">
+                    <div
+                      className="progress-fill"
+                      style={{
+                        width: `${pct}%`,
+                        background: isComplete ? '#22c55e' : '#818cf8',
+                        boxShadow: `0 0 8px ${isComplete ? 'rgba(34,197,94,0.4)' : 'rgba(129,140,248,0.4)'}`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-between text-xs text-muted">
+                  <span>{pct.toFixed(0)}% complete</span>
+                  {dailyNeeded && dailyNeeded > 0 && (
+                    <span className="text-primary">Save {fmt(Math.ceil(dailyNeeded))}/day to reach goal</span>
+                  )}
+                </div>
               </div>
-              <p className="text-base font-semibold text-foreground mb-1">
-                No savings goals yet.
-              </p>
-              <p className="text-sm text-muted-foreground mb-5">
-                Set a goal to start building your savings habit.
-              </p>
-              <Button
-                size="sm"
-                className="gap-2 shadow-sm"
-                onClick={() => setShowModal(true)}
-              >
-                <Plus size={16} /> Create First Goal
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {goals.map((g) => {
-              const pct = Math.min(
-                (g.current_amount / g.target_amount) * 100,
-                100,
-              );
-              const isComplete = g.current_amount >= g.target_amount;
-              const daysLeft = g.deadline
-                ? differenceInDays(parseISO(g.deadline), new Date())
-                : null;
-              const dailyNeeded =
-                daysLeft && daysLeft > 0
-                  ? (g.target_amount - g.current_amount) / daysLeft
-                  : null;
-
-              return (
-                <Card
-                  key={g.id}
-                  className="glass-card border-border/40 group hover:border-primary/30 hover:shadow-card-hover transition-all duration-300"
-                >
-                  <CardContent className="p-6 relative">
-                    <div className="absolute top-4 right-4 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => handleDelete(g.id)}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-
-                    <div className="mb-6 pr-8">
-                      <p className="text-lg font-bold text-foreground tracking-tight leading-tight">
-                        {g.name}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                          {g.deadline
-                            ? `Due ${format(parseISO(g.deadline), "MMM d, yyyy")}`
-                            : "No deadline"}
-                        </p>
-                        {daysLeft !== null && daysLeft > 0 && !isComplete && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted/50 text-foreground border border-border/60">
-                            {daysLeft} days left
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mb-5">
-                      <div className="flex justify-between items-baseline mb-2">
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-2xl font-bold text-foreground tracking-tight">
-                            {fmt(g.current_amount)}
-                          </span>
-                          <span className="text-sm font-medium text-muted-foreground">
-                            saved
-                          </span>
-                        </div>
-                        <span className="text-xs font-medium text-muted-foreground bg-muted/30 px-2 py-0.5 rounded-full border border-border/40">
-                          of {fmt(g.target_amount)}
-                        </span>
-                      </div>
-
-                      <div className="h-2.5 w-full rounded-full bg-secondary/60 overflow-hidden border border-border/40">
-                        <div
-                          className="h-full rounded-full transition-all duration-1000 ease-out relative"
-                          style={{
-                            width: `${pct}%`,
-                            background: isComplete
-                              ? "hsl(var(--success))"
-                              : "hsl(var(--primary))",
-                          }}
-                        >
-                          <div
-                            className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite] -skew-x-12"
-                            style={{ transform: "translateX(-100%)" }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-auto">
-                      <div className="flex flex-col gap-0.5">
-                        <span
-                          className={clsx(
-                            "text-sm font-bold",
-                            isComplete ? "text-success" : "text-foreground",
-                          )}
-                        >
-                          {pct.toFixed(0)}% complete
-                        </span>
-                        {dailyNeeded && dailyNeeded > 0 && !isComplete ? (
-                          <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">
-                            Save {fmt(Math.ceil(dailyNeeded))}/day
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                            {isComplete ? "Goal Achieved!" : "Keep going!"}
-                          </span>
-                        )}
-                      </div>
-                      {isComplete ? (
-                        <div className="h-8 w-8 rounded-full bg-success/10 flex items-center justify-center border border-success/20">
-                          <Target size={14} className="text-success" />
-                        </div>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 gap-1.5 text-xs font-semibold px-3 glass-panel hover:bg-primary/5 hover:text-primary hover:border-primary/30"
-                          onClick={() => setContributeModal(g.id)}
-                        >
-                          <Plus size={13} /> Add
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

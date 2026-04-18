@@ -1,5 +1,4 @@
 """Feedback classification pipeline."""
-
 from __future__ import annotations
 
 import json
@@ -9,43 +8,37 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-async def classify_feedback(
-    text: str, feature_request: str = "", rating: Optional[int] = None
-) -> dict:
-    """Classify feedback text using LLM, falling back to a heuristic."""
+async def classify_feedback(text: str, feature_request: str = "", rating: Optional[int] = None) -> dict:
+    """Classify feedback text using LLM. Returns classification, improvements, priority."""
     try:
-        from app.services.llm_client import llm_chat_completion, llm_pool
+        from openai import AsyncOpenAI
+
+        from app.config import get_settings
         from app.services.prompts import FEEDBACK_CLASSIFIER_PROMPT
 
-        if not llm_pool():
+        settings = get_settings()
+        if not settings.LLM_PROVIDER_KEY:
             return _heuristic_classify(text, rating)
 
+        client = AsyncOpenAI(api_key=settings.LLM_PROVIDER_KEY, base_url=settings.LLM_PROVIDER_BASE_URL)
         prompt = FEEDBACK_CLASSIFIER_PROMPT.format(
             rating=rating or "not provided",
             text=text or "no text",
             feature_request=feature_request or "none",
         )
-        response = await llm_chat_completion(
+        response = await client.chat.completions.create(
+            model=settings.LLM_PROVIDER_MODEL,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_tokens=400,
             temperature=0.2,
-            op_name="feedback.classify",
         )
         result = json.loads(response.choices[0].message.content or "{}")
-        logger.info(
-            "feedback.classified",
-            extra={
-                "classification": result.get("classification"),
-                "priority": result.get("priority"),
-            },
-        )
+        logger.info(f"Feedback classified: {result.get('classification')} / {result.get('priority')}")
         return result
 
     except Exception as e:
-        logger.warning(
-            "feedback.classify_failed", extra={"err": repr(e)[:200]}
-        )
+        logger.warning(f"Feedback classification failed: {e}, using heuristic")
         return _heuristic_classify(text, rating)
 
 
@@ -57,15 +50,7 @@ def _heuristic_classify(text: str, rating: Optional[int]) -> dict:
 
     bug_keywords = ["crash", "error", "bug", "broken", "doesn't work", "fails", "wrong"]
     ux_keywords = ["confusing", "hard to", "unclear", "difficult", "improve", "better"]
-    feature_keywords = [
-        "add",
-        "want",
-        "would like",
-        "feature",
-        "support",
-        "wish",
-        "please",
-    ]
+    feature_keywords = ["add", "want", "would like", "feature", "support", "wish", "please"]
 
     if any(k in lower for k in bug_keywords):
         classification = "Bug"
@@ -86,8 +71,6 @@ def _heuristic_classify(text: str, rating: Optional[int]) -> dict:
         "classification": classification,
         "top_improvements": [],
         "priority": priority,
-        "sentiment": "positive"
-        if (rating or 3) >= 4
-        else ("negative" if (rating or 3) <= 2 else "neutral"),
+        "sentiment": "positive" if (rating or 3) >= 4 else ("negative" if (rating or 3) <= 2 else "neutral"),
         "summary": text[:100] if text else "",
     }

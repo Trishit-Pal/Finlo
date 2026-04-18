@@ -4,10 +4,10 @@ Revision ID: 20260407_0001
 Revises:
 Create Date: 2026-04-07
 """
-
 from __future__ import annotations
 
 from alembic import op
+
 from app.db.models import Base
 
 # revision identifiers, used by Alembic.

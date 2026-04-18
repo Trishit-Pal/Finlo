@@ -1,10 +1,8 @@
 """Centralized prompt templates for all AI calls."""
-
 from __future__ import annotations
 
 # ── Parser Fallback Prompt ────────────────────────────────────────────────────
-PARSER_FALLBACK_PROMPT = """\
-You are a receipt parser. Given raw OCR text lines, extract structured data.
+PARSER_FALLBACK_PROMPT = """You are a receipt parser. Given raw OCR text lines from a receipt, extract structured data.
 
 OCR TEXT:
 {ocr_text}
@@ -73,8 +71,7 @@ Return ONLY valid JSON:
 """
 
 # ── Coach Prompt ──────────────────────────────────────────────────────────────
-COACH_PROMPT = """\
-You are a personal finance coach. Analyze the user's data and provide advice.
+COACH_PROMPT = """You are a personal finance coach. Analyze the user's financial data and provide actionable advice.
 
 USER PROFILE:
 - Monthly income: {monthly_income}
@@ -120,13 +117,11 @@ Rules:
 - Provide 1 to 3 actions only.
 - Each action must be specific and reference actual spending patterns.
 - Weekly savings must be realistic based on actual spend data.
-- Confidence reflects how much data was available.
-  (0.9 = lots of data, 0.5 = sparse data).
+- Confidence reflects how much data was available (0.9 = lots of data, 0.5 = sparse data).
 """
 
 # ── Feedback Classification Prompt ────────────────────────────────────────────
-FEEDBACK_CLASSIFIER_PROMPT = """\
-You are a product feedback classifier for a finance app.
+FEEDBACK_CLASSIFIER_PROMPT = """You are a product feedback classifier for a personal finance app.
 
 USER FEEDBACK:
 Rating: {rating}/5
@@ -149,7 +144,7 @@ Return ONLY valid JSON:
 }}
 
 Priority rules:
-- high: bugs affecting core functionality, strong negative sentiment
+- high: bugs affecting core functionality, strong negative sentiment with specific issues
 - med: UX friction, feature requests with clear value
 - low: minor suggestions, praise with small improvements
 """

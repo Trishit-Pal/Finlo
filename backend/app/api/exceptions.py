@@ -1,9 +1,8 @@
 """Structured exception hierarchy with user-friendly messages.
 
-All API errors return:
-{"status": "error", "code": "...", "message": "...", "details": {...}}
+All API errors return: {"status": "error", "code": "...", "message": "...", "details": {...}}
+matching the error shape defined in CLAUDE.md.
 """
-
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -162,9 +161,6 @@ class ExternalServiceError(FinloException):
         super().__init__(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"{service} service unavailable",
-            user_message=(
-                "An external service is temporarily "
-                "unavailable. Please try again."
-            ),
+            user_message="An external service is temporarily unavailable. Please try again.",
             code="SERVICE_UNAVAILABLE",
         )

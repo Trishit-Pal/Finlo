@@ -1,11 +1,6 @@
-line-length = 120
-
 [lint]
 select = ["E", "F", "W", "I"]
 
 [lint.per-file-ignores]
-"app/tests/*" = ["S101", "E402"]
+"app/tests/*" = ["S101"]
 "app/db/models.py" = ["E501"]
-
-[lint.pycodestyle]
-max-line-length = 120

@@ -1,5 +1,4 @@
 """Test configuration and fixtures."""
-
 from __future__ import annotations
 
 import asyncio
@@ -34,12 +33,9 @@ from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 
 TEST_DB_URL = os.environ["DATABASE_URL"]
-TEST_JWT_SECRET = os.environ.get("JWT_SECRET", "test-secret-key-for-testing-only")
 
 test_engine = create_async_engine(TEST_DB_URL, echo=False)
-TestSessionLocal = async_sessionmaker(
-    test_engine, class_=AsyncSession, expire_on_commit=False
-)
+TestSessionLocal = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 
 
 @pytest.fixture(scope="session")
@@ -55,9 +51,7 @@ async def setup_db():
         TEST_DB_PATH.unlink(missing_ok=True)
     async with test_engine.begin() as conn:
         if conn.dialect.name == "postgresql":
-            await conn.execute(
-                __import__("sqlalchemy").text("CREATE EXTENSION IF NOT EXISTS vector")
-            )
+            await conn.execute(__import__("sqlalchemy").text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -77,7 +71,6 @@ async def db(setup_db) -> AsyncGenerator[AsyncSession, None]:
 @pytest_asyncio.fixture
 async def test_user(db: AsyncSession) -> User:
     from passlib.context import CryptContext
-
     pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
     user = User(
         email="test@example.com",
@@ -94,7 +87,6 @@ async def test_user(db: AsyncSession) -> User:
 @pytest_asyncio.fixture
 async def admin_user(db: AsyncSession) -> User:
     from passlib.context import CryptContext
-
     pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
     user = User(
         email="admin@example.com",
@@ -111,19 +103,11 @@ async def admin_user(db: AsyncSession) -> User:
 def _make_jwt(user: User) -> str:
     from datetime import datetime, timedelta, timezone
 
-    import jwt
-
-    now = datetime.now(timezone.utc)
-    expire = now + timedelta(hours=24)
+    from jose import jwt
+    expire = datetime.now(timezone.utc) + timedelta(hours=24)
     return jwt.encode(
-        {
-            "sub": user.id,
-            "email": user.email,
-            "exp": expire,
-            "iat": now,
-            "type": "access",
-        },
-        TEST_JWT_SECRET,
+        {"sub": user.id, "email": user.email, "exp": expire},
+        "test-secret-key-for-testing-only",
         algorithm="HS256",
     )
 
@@ -131,14 +115,11 @@ def _make_jwt(user: User) -> str:
 @pytest_asyncio.fixture
 async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """HTTP client with DB session override."""
-
     async def override_db():
         yield db
 
     app.dependency_overrides[get_db] = override_db
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
 
@@ -156,19 +137,6 @@ async def admin_client(client: AsyncClient, admin_user: User) -> AsyncClient:
     token = _make_jwt(admin_user)
     client.headers["Authorization"] = f"Bearer {token}"
     return client
-
-
-@pytest.fixture(autouse=True)
-def reset_rate_limiter() -> None:
-    """Reset the in-memory rate-limiter storage before every test so that
-    tests which share the same endpoint (e.g. /transactions/import) do not
-    bleed 429s into each other."""
-    try:
-        from app.api.transactions import _limiter
-
-        _limiter.reset()
-    except Exception:
-        pass
 
 
 # ── Sample receipt data ───────────────────────────────────────────────────────

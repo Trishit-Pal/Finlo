@@ -35,21 +35,6 @@ fun AddEditTransactionScreen(
     var paymentMode by remember { mutableStateOf("") }
     var isIncome by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
-    var loaded by remember { mutableStateOf(false) }
-
-    LaunchedEffect(editId) {
-        if (isEdit && editId != null && !loaded) {
-            viewModel.loadTransaction(editId) { txn ->
-                amount = txn.amount.toString()
-                merchant = txn.merchant
-                category = txn.category ?: ""
-                date = txn.date
-                paymentMode = txn.paymentMode ?: ""
-                isIncome = txn.notes == "income"
-                loaded = true
-            }
-        }
-    }
 
     val categories = CategoryUtils.all.map { it.name }
     val paymentModes = listOf("" to "Select", "cash" to "Cash", "upi" to "UPI", "card" to "Card", "net_banking" to "Net Banking")

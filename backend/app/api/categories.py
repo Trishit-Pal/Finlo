@@ -1,5 +1,4 @@
 """Categories API: user-defined expense categories."""
-
 from typing import Optional
 
 from fastapi import APIRouter, status
@@ -56,21 +55,15 @@ class CategoryOut(BaseModel):
 
 
 @router.post("/init", response_model=list[CategoryOut])
-async def init_default_categories(
-    current_user: CurrentUser, db: DB
-) -> list[CategoryOut]:
+async def init_default_categories(current_user: CurrentUser, db: DB) -> list[CategoryOut]:
     """Create default categories for user if none exist."""
     result = await db.execute(
-        select(sa_func.count())
-        .select_from(Category)
-        .where(Category.user_id == current_user.id)
+        select(sa_func.count()).select_from(Category).where(Category.user_id == current_user.id)
     )
     count = result.scalar()
     if count and count > 0:
         result = await db.execute(
-            select(Category)
-            .where(Category.user_id == current_user.id)
-            .order_by(Category.name)
+            select(Category).where(Category.user_id == current_user.id).order_by(Category.name)
         )
         return [CategoryOut.model_validate(c) for c in result.scalars().all()]
 
@@ -93,28 +86,16 @@ async def init_default_categories(
 async def list_categories(
     current_user: CurrentUser, db: DB, include_archived: bool = False
 ) -> list[CategoryOut]:
-    from app.services.cache import cache_get, cache_set
-
-    cache_key = f"user:{current_user.id}:categories:{include_archived}"
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return [CategoryOut(**c) for c in cached]
-
     q = select(Category).where(Category.user_id == current_user.id)
     if not include_archived:
         q = q.where(Category.is_archived.is_(False))
     q = q.order_by(Category.name)
     result = await db.execute(q)
-    items = [CategoryOut.model_validate(c) for c in result.scalars().all()]
-
-    await cache_set(cache_key, [i.model_dump() for i in items], ttl=300)
-    return items
+    return [CategoryOut.model_validate(c) for c in result.scalars().all()]
 
 
 @router.post("", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
-async def create_category(
-    body: CategoryCreate, current_user: CurrentUser, db: DB
-) -> CategoryOut:
+async def create_category(body: CategoryCreate, current_user: CurrentUser, db: DB) -> CategoryOut:
     cat = Category(
         user_id=current_user.id,
         name=body.name,
@@ -123,9 +104,6 @@ async def create_category(
     )
     db.add(cat)
     await db.flush()
-    from app.services.cache import cache_delete_pattern
-
-    await cache_delete_pattern(f"user:{current_user.id}:categories:*")
     return CategoryOut.model_validate(cat)
 
 
@@ -134,9 +112,7 @@ async def update_category(
     cat_id: str, body: CategoryUpdate, current_user: CurrentUser, db: DB
 ) -> CategoryOut:
     result = await db.execute(
-        select(Category).where(
-            Category.id == cat_id, Category.user_id == current_user.id
-        )
+        select(Category).where(Category.id == cat_id, Category.user_id == current_user.id)
     )
     cat = result.scalar_one_or_none()
     if not cat:
@@ -150,18 +126,13 @@ async def update_category(
     if body.is_archived is not None:
         cat.is_archived = body.is_archived
     await db.flush()
-    from app.services.cache import cache_delete_pattern
-
-    await cache_delete_pattern(f"user:{current_user.id}:categories:*")
     return CategoryOut.model_validate(cat)
 
 
 @router.delete("/{cat_id}")
 async def delete_category(cat_id: str, current_user: CurrentUser, db: DB) -> dict:
     result = await db.execute(
-        select(Category).where(
-            Category.id == cat_id, Category.user_id == current_user.id
-        )
+        select(Category).where(Category.id == cat_id, Category.user_id == current_user.id)
     )
     cat = result.scalar_one_or_none()
     if not cat:
@@ -169,9 +140,7 @@ async def delete_category(cat_id: str, current_user: CurrentUser, db: DB) -> dic
 
     # Check if linked to transactions — archive instead of delete
     tx_count = await db.execute(
-        select(sa_func.count())
-        .select_from(Transaction)
-        .where(Transaction.category_id == cat_id)
+        select(sa_func.count()).select_from(Transaction).where(Transaction.category_id == cat_id)
     )
     if tx_count.scalar() > 0:
         cat.is_archived = True
@@ -179,7 +148,4 @@ async def delete_category(cat_id: str, current_user: CurrentUser, db: DB) -> dic
         return {"detail": "Category archived (linked to existing entries)"}
 
     await db.delete(cat)
-    from app.services.cache import cache_delete_pattern
-
-    await cache_delete_pattern(f"user:{current_user.id}:categories:*")
     return {"detail": "Category deleted"}

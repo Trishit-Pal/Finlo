@@ -5,11 +5,10 @@
  * Setup: Set VITE_POSTHOG_KEY in .env to enable.
  * Get a free key at https://posthog.com
  */
-import posthog from "posthog-js";
+import posthog from 'posthog-js';
 
-const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY || "";
-const POSTHOG_HOST =
-  import.meta.env.VITE_POSTHOG_HOST || "https://us.i.posthog.com";
+const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY || '';
+const POSTHOG_HOST = import.meta.env.VITE_POSTHOG_HOST || 'https://us.i.posthog.com';
 
 let initialized = false;
 
@@ -19,15 +18,12 @@ export function initPostHog() {
     api_host: POSTHOG_HOST,
     autocapture: false,
     capture_pageview: true,
-    persistence: "localStorage",
+    persistence: 'localStorage',
   });
   initialized = true;
 }
 
-export function identifyUser(
-  userId: string,
-  properties?: Record<string, unknown>,
-) {
+export function identifyUser(userId: string, properties?: Record<string, unknown>) {
   if (!POSTHOG_KEY) return;
   posthog.identify(userId, properties);
 }
@@ -37,10 +33,7 @@ export function resetUser() {
   posthog.reset();
 }
 
-export function trackEvent(
-  event: string,
-  properties?: Record<string, unknown>,
-) {
+export function trackEvent(event: string, properties?: Record<string, unknown>) {
   if (!POSTHOG_KEY) return;
   posthog.capture(event, properties);
 }
@@ -54,8 +47,8 @@ export function getFeatureFlag(flag: string): string | boolean | undefined {
  * Get A/B test variant — returns "A" as default when PostHog is not configured.
  */
 export function getExperimentVariant(experimentName: string): string {
-  if (!POSTHOG_KEY) return "A";
+  if (!POSTHOG_KEY) return 'A';
   const flag = posthog.getFeatureFlag(experimentName);
-  if (typeof flag === "string") return flag;
-  return flag ? "B" : "A";
+  if (typeof flag === 'string') return flag;
+  return flag ? 'B' : 'A';
 }

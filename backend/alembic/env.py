@@ -2,26 +2,15 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from alembic import context
 from app.config import get_settings
 from app.db.models import Base
 
 config = context.config
 settings = get_settings()
-
-
-def _alembic_url(url: str) -> str:
-    # Alembic runs with a synchronous engine — strip async drivers.
-    if url.startswith("sqlite+aiosqlite://"):
-        return url.replace("sqlite+aiosqlite://", "sqlite://", 1)
-    if "+asyncpg" in url:
-        return url.replace("+asyncpg", "", 1)
-    return url
-
-
-config.set_main_option("sqlalchemy.url", _alembic_url(settings.get_database_url))
+config.set_main_option("sqlalchemy.url", settings.get_database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -51,9 +40,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata, compare_type=True
-        )
+        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
 
         with context.begin_transaction():
             context.run_migrations()

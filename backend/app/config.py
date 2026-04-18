@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # ── App ─────────────────────────────────────────────────────────────────
     ENVIRONMENT: str = "development"
@@ -32,13 +32,13 @@ class Settings(BaseSettings):
         return url
 
     # ── Auth ─────────────────────────────────────────────────────────────────
-    JWT_SECRET: str = ""
+    JWT_SECRET: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 15  # short-lived access token
     JWT_REFRESH_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7-day refresh token
 
     # ── Security ─────────────────────────────────────────────────────────────
-    PII_ENCRYPTION_KEY: str = ""
+    PII_ENCRYPTION_KEY: str = "5MP_jPvUiaRF0CtBgwAx4_OOR9nZUJq3wQImCG40Iak="
 
     # Supabase (optional — leave blank to use local JWT auth)
     SUPABASE_URL: Optional[str] = None
@@ -50,36 +50,14 @@ class Settings(BaseSettings):
     OAUTH_GOOGLE_CLIENT_SECRET: Optional[str] = None
     OTP_PROVIDER: str = "mock"
 
-    # Twilio (required when OTP_PROVIDER=twilio)
-    TWILIO_ACCOUNT_SID: Optional[str] = None
-    TWILIO_AUTH_TOKEN: Optional[str] = None
-    TWILIO_FROM_NUMBER: Optional[str] = None
-
-    # Cron endpoint shared secret (set in scheduler, avoids persisting admin JWTs)
-    CRON_SECRET: Optional[str] = None
-
     # ── LLM / AI ─────────────────────────────────────────────────────────────
-    # Either LLM_PROVIDER_KEY (single) or LLM_PROVIDER_KEYS (comma-separated)
-    # may be set. When both are set, KEYS takes precedence; KEY is appended
-    # for back-compat. Rotation quarantines a key on 401/403/429.
     LLM_PROVIDER_KEY: Optional[str] = None
-    LLM_PROVIDER_KEYS: str = ""
     LLM_PROVIDER_MODEL: str = "gpt-4o-mini"
     LLM_PROVIDER_BASE_URL: str = "https://api.openai.com/v1"
 
     EMBEDDING_PROVIDER_KEY: Optional[str] = None
-    EMBEDDING_PROVIDER_KEYS: str = ""
     EMBEDDING_PROVIDER_MODEL: str = "text-embedding-3-small"
     EMBEDDING_PROVIDER_BASE_URL: str = "https://api.openai.com/v1"
-
-    # Comma-separated exchange-rate endpoints, each containing "{base}".
-    # Tried in order; first successful response wins.
-    CURRENCY_API_URLS: str = "https://open.er-api.com/v6/latest/{base}"
-
-    # ── Database Pool ─────────────────────────────────────────────────────────
-    DB_POOL_SIZE: int = 20
-    DB_MAX_OVERFLOW: int = 30
-    DB_POOL_RECYCLE: int = 1800
 
     # ── Redis ────────────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -90,7 +68,7 @@ class Settings(BaseSettings):
     STORAGE_SECRET_KEY: str = "minioadmin"
     STORAGE_BUCKET: str = "finance-receipts"
     STORAGE_REGION: str = "us-east-1"
-    STORAGE_ENCRYPTION_KEY: str = ""
+    STORAGE_ENCRYPTION_KEY: str = "0" * 64  # 32 bytes hex
 
     # ── Upload Limits ────────────────────────────────────────────────────────
     MAX_UPLOAD_SIZE_MB: int = 10
@@ -99,9 +77,6 @@ class Settings(BaseSettings):
     # ── Monitoring ───────────────────────────────────────────────────────────
     SENTRY_DSN: Optional[str] = None
 
-    # ── Data Retention ───────────────────────────────────────────────────────
-    AUDIT_LOG_RETENTION_DAYS: int = 90  # days before audit_logs rows are pruned
-
     FEATURE_TRANSACTION_SYNC_EXPERIMENTAL: bool = False
     FEATURE_BANK_AGGREGATOR_CONNECT: bool = False
     FEATURE_EMAIL_STATEMENT_PARSE: bool = False
@@ -109,34 +84,6 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",")]
-
-    @staticmethod
-    def _merge_csv_and_single(csv: str, single: Optional[str]) -> list[str]:
-        """Merge a comma-separated list with a single fallback. Preserves order."""
-        out: list[str] = []
-        seen: set[str] = set()
-        for part in (csv or "").split(","):
-            p = part.strip()
-            if p and p not in seen:
-                out.append(p)
-                seen.add(p)
-        if single and single.strip() and single.strip() not in seen:
-            out.append(single.strip())
-        return out
-
-    @property
-    def llm_provider_keys(self) -> list[str]:
-        return self._merge_csv_and_single(self.LLM_PROVIDER_KEYS, self.LLM_PROVIDER_KEY)
-
-    @property
-    def embedding_provider_keys(self) -> list[str]:
-        return self._merge_csv_and_single(
-            self.EMBEDDING_PROVIDER_KEYS, self.EMBEDDING_PROVIDER_KEY
-        )
-
-    @property
-    def currency_api_urls(self) -> list[str]:
-        return [u.strip() for u in self.CURRENCY_API_URLS.split(",") if u.strip()]
 
     @property
     def allowed_upload_types(self) -> list[str]:
@@ -152,65 +99,32 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
-        # Allow tests to run with minimal config
-        if self.ENVIRONMENT == "test":
-            # Provide safe test-only defaults for empty keys
-            if not self.JWT_SECRET:
-                object.__setattr__(
-                    self, "JWT_SECRET", "test-only-jwt-secret-do-not-use"
-                )
-            if not self.PII_ENCRYPTION_KEY:
-                from cryptography.fernet import Fernet
-
-                object.__setattr__(
-                    self, "PII_ENCRYPTION_KEY", Fernet.generate_key().decode()
-                )
-            if not self.STORAGE_ENCRYPTION_KEY:
-                object.__setattr__(self, "STORAGE_ENCRYPTION_KEY", "a" * 64)
+        if self.ENVIRONMENT != "production":
             return self
 
-        # All non-test environments require real secrets
-        required_secrets = {
+        required_in_prod = {
             "JWT_SECRET": self.JWT_SECRET,
-            "PII_ENCRYPTION_KEY": self.PII_ENCRYPTION_KEY,
+            "DATABASE_URL": self.DATABASE_URL,
+            "STORAGE_ENCRYPTION_KEY": self.STORAGE_ENCRYPTION_KEY,
         }
-        missing = [k for k, v in required_secrets.items() if not v]
+        missing = [key for key, value in required_in_prod.items() if not value]
         if missing:
-            raise ValueError(
-                f"Missing required secret env vars: "
-                f"{', '.join(missing)}. "
-                f"Set these in your .env file."
-            )
+            raise ValueError(f"Missing required production env vars: {', '.join(missing)}")
 
-        if self.ENVIRONMENT == "production":
-            if "sqlite" in self.DATABASE_URL:
-                raise ValueError(
-                    "SQLite is not allowed in production."
-                )
-            if not self.STORAGE_ENCRYPTION_KEY:
-                raise ValueError(
-                    "STORAGE_ENCRYPTION_KEY is required "
-                    "in production."
-                )
-            # AES-256-GCM requires exactly 32 bytes = 64 hex characters.
-            if len(self.STORAGE_ENCRYPTION_KEY) != 64 or not all(
-                c in "0123456789abcdefABCDEF" for c in self.STORAGE_ENCRYPTION_KEY
-            ):
-                raise ValueError(
-                    "STORAGE_ENCRYPTION_KEY must be exactly 64 hex characters "
-                    "(32 bytes) for AES-256-GCM."
-                )
-            if self.use_supabase:
-                if not self.SUPABASE_SERVICE_ROLE_KEY:
-                    raise ValueError(
-                        "SUPABASE_SERVICE_ROLE_KEY required "
-                        "when Supabase is enabled."
-                    )
-                if not self.SUPABASE_JWT_SECRET:
-                    raise ValueError(
-                        "SUPABASE_JWT_SECRET required "
-                        "when Supabase is enabled."
-                    )
+        if "sqlite" in self.DATABASE_URL:
+            raise ValueError("SQLite is not allowed in production. Set DATABASE_URL to a PostgreSQL connection string.")
+
+        weak_values = {
+            "JWT_SECRET": "change-me-in-production",
+            "PII_ENCRYPTION_KEY": "5MP_jPvUiaRF0CtBgwAx4_OOR9nZUJq3wQImCG40Iak=",
+            "STORAGE_ENCRYPTION_KEY": "0" * 64,
+        }
+        weak_detected = [key for key, value in weak_values.items() if getattr(self, key) == value]
+        if weak_detected:
+            raise ValueError(f"Weak default secrets are not allowed in production: {', '.join(weak_detected)}")
+
+        if self.use_supabase and not self.SUPABASE_SERVICE_ROLE_KEY:
+            raise ValueError("SUPABASE_SERVICE_ROLE_KEY is required in production when Supabase mode is enabled")
 
         return self
 

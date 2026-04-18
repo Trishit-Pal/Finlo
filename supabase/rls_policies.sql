@@ -105,46 +105,6 @@ drop policy if exists audit_logs_select_own on audit_logs;
 create policy audit_logs_select_own on audit_logs for select to authenticated
     using (user_id::text = auth.uid()::text);
 
-<<<<<<< HEAD
-=======
--- ── Accounts & Finance Intelligence ─────────────────────────────────────────
-
--- Accounts
-alter table if exists accounts enable row level security;
-drop policy if exists accounts_owner_all on accounts;
-create policy accounts_owner_all on accounts for all to authenticated
-    using (user_id::text = auth.uid()::text)
-    with check (user_id::text = auth.uid()::text);
-
--- Balance Snapshots
-alter table if exists balance_snapshots enable row level security;
-drop policy if exists balance_snapshots_owner_all on balance_snapshots;
-create policy balance_snapshots_owner_all on balance_snapshots for all to authenticated
-    using (user_id::text = auth.uid()::text)
-    with check (user_id::text = auth.uid()::text);
-
--- Import Batches
-alter table if exists import_batches enable row level security;
-drop policy if exists import_batches_owner_all on import_batches;
-create policy import_batches_owner_all on import_batches for all to authenticated
-    using (user_id::text = auth.uid()::text)
-    with check (user_id::text = auth.uid()::text);
-
--- Recurring Rules
-alter table if exists recurring_rules enable row level security;
-drop policy if exists recurring_rules_owner_all on recurring_rules;
-create policy recurring_rules_owner_all on recurring_rules for all to authenticated
-    using (user_id::text = auth.uid()::text)
-    with check (user_id::text = auth.uid()::text);
-
--- Insights
-alter table if exists insights enable row level security;
-drop policy if exists insights_owner_all on insights;
-create policy insights_owner_all on insights for all to authenticated
-    using (user_id::text = auth.uid()::text)
-    with check (user_id::text = auth.uid()::text);
-
->>>>>>> 5b6ef39 (New Attempt)
 -- ── System-managed tables: deny direct access ──────────────────────────────
 drop policy if exists embeddings_deny_all on embeddings;
 create policy embeddings_deny_all on embeddings for all to authenticated

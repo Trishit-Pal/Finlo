@@ -42,12 +42,6 @@ class DebtsViewModel @Inject constructor(private val api: FinloApi) : ViewModel(
     val summary = _summary.asStateFlow()
     private val _loading = MutableStateFlow(true)
     val loading = _loading.asStateFlow()
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage = _errorMessage.asStateFlow()
-
-    fun clearError() {
-        _errorMessage.value = null
-    }
 
     init { load() }
 
@@ -57,58 +51,32 @@ class DebtsViewModel @Inject constructor(private val api: FinloApi) : ViewModel(
             try {
                 _debts.value = api.getDebts()
                 _summary.value = api.getDebtSummary()
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to load debts. Check your connection and try again."
-            }
+            } catch (_: Exception) {}
             _loading.value = false
         }
     }
 
-    fun create(req: DebtCreateRequest, onResult: (Boolean) -> Unit) {
+    fun create(req: DebtCreateRequest, onDone: () -> Unit) {
         viewModelScope.launch {
-            try {
-                api.createDebt(req)
-                load()
-                onResult(true)
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to add debt."
-                onResult(false)
-            }
+            try { api.createDebt(req); load(); onDone() } catch (_: Exception) {}
         }
     }
 
-    fun pay(id: String, amount: Double, onResult: (Boolean) -> Unit) {
+    fun pay(id: String, amount: Double, onDone: () -> Unit) {
         viewModelScope.launch {
-            try {
-                api.payDebt(id, mapOf("amount" to amount))
-                load()
-                onResult(true)
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to log payment."
-                onResult(false)
-            }
+            try { api.payDebt(id, mapOf("amount" to amount)); load(); onDone() } catch (_: Exception) {}
         }
     }
 
     fun settle(id: String) {
         viewModelScope.launch {
-            try {
-                api.settleDebt(id)
-                load()
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to mark debt as settled."
-            }
+            try { api.settleDebt(id); load() } catch (_: Exception) {}
         }
     }
 
     fun delete(id: String) {
         viewModelScope.launch {
-            try {
-                api.deleteDebt(id)
-                load()
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to delete debt."
-            }
+            try { api.deleteDebt(id); load() } catch (_: Exception) {}
         }
     }
 }
@@ -139,7 +107,6 @@ fun DebtsScreen(onBack: () -> Unit, viewModel: DebtsViewModel = hiltViewModel())
     val debts by viewModel.debts.collectAsState()
     val summary by viewModel.summary.collectAsState()
     val loading by viewModel.loading.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
     var showForm by remember { mutableStateOf(false) }
     var payDebtId by remember { mutableStateOf<String?>(null) }
 
@@ -158,18 +125,6 @@ fun DebtsScreen(onBack: () -> Unit, viewModel: DebtsViewModel = hiltViewModel())
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            errorMessage?.let { msg ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(msg, color = Danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { viewModel.clearError() }) { Text("Dismiss", fontSize = 12.sp) }
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-
             // Summary
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 listOf(
@@ -262,22 +217,22 @@ fun DebtsScreen(onBack: () -> Unit, viewModel: DebtsViewModel = hiltViewModel())
 
     // Create Dialog
     if (showForm) {
-        CreateDebtDialog(onDismiss = { showForm = false; viewModel.clearError() }) { req, onResult ->
-            viewModel.create(req, onResult)
+        CreateDebtDialog(onDismiss = { showForm = false }) { req ->
+            viewModel.create(req) { showForm = false }
         }
     }
 
     // Pay Dialog
     payDebtId?.let { id ->
-        PayDebtDialog(onDismiss = { payDebtId = null; viewModel.clearError() }) { amount, onResult ->
-            viewModel.pay(id, amount, onResult)
+        PayDebtDialog(onDismiss = { payDebtId = null }) { amount ->
+            viewModel.pay(id, amount) { payDebtId = null }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CreateDebtDialog(onDismiss: () -> Unit, onCreate: (DebtCreateRequest, (Boolean) -> Unit) -> Unit) {
+private fun CreateDebtDialog(onDismiss: () -> Unit, onCreate: (DebtCreateRequest) -> Unit) {
     var name by remember { mutableStateOf("") }
     var type by remember { mutableStateOf("personal_loan") }
     var totalAmount by remember { mutableStateOf("") }
@@ -386,21 +341,16 @@ private fun CreateDebtDialog(onDismiss: () -> Unit, onCreate: (DebtCreateRequest
                 onClick = {
                     saving = true
                     val total = totalAmount.toDoubleOrNull() ?: 0.0
-                    onCreate(
-                        DebtCreateRequest(
-                            name = name,
-                            type = type,
-                            totalAmount = total,
-                            remainingBalance = remainingBalance.toDoubleOrNull() ?: total,
-                            interestRate = interestRate.toDoubleOrNull(),
-                            emiAmount = emiAmount.toDoubleOrNull(),
-                            nextDueDate = nextDueDate.ifBlank { null },
-                            lenderName = lenderName.ifBlank { null },
-                        ),
-                    ) { success ->
-                        saving = false
-                        if (success) onDismiss()
-                    }
+                    onCreate(DebtCreateRequest(
+                        name = name,
+                        type = type,
+                        totalAmount = total,
+                        remainingBalance = remainingBalance.toDoubleOrNull() ?: total,
+                        interestRate = interestRate.toDoubleOrNull(),
+                        emiAmount = emiAmount.toDoubleOrNull(),
+                        nextDueDate = nextDueDate.ifBlank { null },
+                        lenderName = lenderName.ifBlank { null },
+                    ))
                 },
                 enabled = !saving && name.isNotBlank() && totalAmount.toDoubleOrNull() != null,
                 modifier = Modifier.fillMaxWidth(),
@@ -410,7 +360,7 @@ private fun CreateDebtDialog(onDismiss: () -> Unit, onCreate: (DebtCreateRequest
 }
 
 @Composable
-private fun PayDebtDialog(onDismiss: () -> Unit, onPay: (Double, (Boolean) -> Unit) -> Unit) {
+private fun PayDebtDialog(onDismiss: () -> Unit, onPay: (Double) -> Unit) {
     var amount by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
 
@@ -448,15 +398,7 @@ private fun PayDebtDialog(onDismiss: () -> Unit, onPay: (Double, (Boolean) -> Un
                         text = if (saving) "Logging..." else "Log Payment",
                         onClick = {
                             saving = true
-                            val parsed = amount.toDoubleOrNull()
-                            if (parsed != null) {
-                                onPay(parsed) { success ->
-                                    saving = false
-                                    if (success) onDismiss()
-                                }
-                            } else {
-                                saving = false
-                            }
+                            amount.toDoubleOrNull()?.let { onPay(it) }
                         },
                         enabled = !saving && amount.toDoubleOrNull() != null,
                         modifier = Modifier.fillMaxWidth(),

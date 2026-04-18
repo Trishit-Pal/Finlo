@@ -39,61 +39,32 @@ class SavingsViewModel @Inject constructor(private val api: FinloApi) : ViewMode
     val goals = _goals.asStateFlow()
     private val _loading = MutableStateFlow(true)
     val loading = _loading.asStateFlow()
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage = _errorMessage.asStateFlow()
-
-    fun clearError() {
-        _errorMessage.value = null
-    }
 
     init { load() }
 
     fun load() {
         viewModelScope.launch {
             _loading.value = true
-            try {
-                _goals.value = api.getSavingsGoals()
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to load savings goals. Check your connection and try again."
-            }
+            try { _goals.value = api.getSavingsGoals() } catch (_: Exception) {}
             _loading.value = false
         }
     }
 
-    fun create(req: SavingsGoalCreateRequest, onResult: (Boolean) -> Unit) {
+    fun create(req: SavingsGoalCreateRequest, onDone: () -> Unit) {
         viewModelScope.launch {
-            try {
-                api.createSavingsGoal(req)
-                load()
-                onResult(true)
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to create savings goal."
-                onResult(false)
-            }
+            try { api.createSavingsGoal(req); load(); onDone() } catch (_: Exception) {}
         }
     }
 
-    fun contribute(id: String, amount: Double, onResult: (Boolean) -> Unit) {
+    fun contribute(id: String, amount: Double, onDone: () -> Unit) {
         viewModelScope.launch {
-            try {
-                api.contributeSavings(id, mapOf("amount" to amount))
-                load()
-                onResult(true)
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to add contribution."
-                onResult(false)
-            }
+            try { api.contributeSavings(id, mapOf("amount" to amount)); load(); onDone() } catch (_: Exception) {}
         }
     }
 
     fun delete(id: String) {
         viewModelScope.launch {
-            try {
-                api.deleteSavingsGoal(id)
-                load()
-            } catch (_: Exception) {
-                _errorMessage.value = "Failed to delete savings goal."
-            }
+            try { api.deleteSavingsGoal(id); load() } catch (_: Exception) {}
         }
     }
 }
@@ -102,7 +73,6 @@ class SavingsViewModel @Inject constructor(private val api: FinloApi) : ViewMode
 fun SavingsScreen(onBack: () -> Unit, viewModel: SavingsViewModel = hiltViewModel()) {
     val goals by viewModel.goals.collectAsState()
     val loading by viewModel.loading.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
     var showForm by remember { mutableStateOf(false) }
     var contributeGoalId by remember { mutableStateOf<String?>(null) }
 
@@ -124,18 +94,6 @@ fun SavingsScreen(onBack: () -> Unit, viewModel: SavingsViewModel = hiltViewMode
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            errorMessage?.let { msg ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(msg, color = Danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { viewModel.clearError() }) { Text("Dismiss", fontSize = 12.sp) }
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-
             // Summary
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 listOf(
@@ -224,21 +182,21 @@ fun SavingsScreen(onBack: () -> Unit, viewModel: SavingsViewModel = hiltViewMode
 
     // Create Dialog
     if (showForm) {
-        CreateGoalDialog(onDismiss = { showForm = false; viewModel.clearError() }) { req, onResult ->
-            viewModel.create(req, onResult)
+        CreateGoalDialog(onDismiss = { showForm = false }) { req ->
+            viewModel.create(req) { showForm = false }
         }
     }
 
     // Contribute Dialog
     contributeGoalId?.let { id ->
-        ContributeDialog(onDismiss = { contributeGoalId = null; viewModel.clearError() }) { amount, onResult ->
-            viewModel.contribute(id, amount, onResult)
+        ContributeDialog(onDismiss = { contributeGoalId = null }) { amount ->
+            viewModel.contribute(id, amount) { contributeGoalId = null }
         }
     }
 }
 
 @Composable
-private fun CreateGoalDialog(onDismiss: () -> Unit, onCreate: (SavingsGoalCreateRequest, (Boolean) -> Unit) -> Unit) {
+private fun CreateGoalDialog(onDismiss: () -> Unit, onCreate: (SavingsGoalCreateRequest) -> Unit) {
     var name by remember { mutableStateOf("") }
     var targetAmount by remember { mutableStateOf("") }
     var deadline by remember { mutableStateOf("") }
@@ -288,16 +246,11 @@ private fun CreateGoalDialog(onDismiss: () -> Unit, onCreate: (SavingsGoalCreate
                 text = if (saving) "Creating..." else "Create Goal",
                 onClick = {
                     saving = true
-                    onCreate(
-                        SavingsGoalCreateRequest(
-                            name = name,
-                            targetAmount = targetAmount.toDoubleOrNull() ?: 0.0,
-                            deadline = deadline.ifBlank { null },
-                        ),
-                    ) { success ->
-                        saving = false
-                        if (success) onDismiss()
-                    }
+                    onCreate(SavingsGoalCreateRequest(
+                        name = name,
+                        targetAmount = targetAmount.toDoubleOrNull() ?: 0.0,
+                        deadline = deadline.ifBlank { null },
+                    ))
                 },
                 enabled = !saving && name.isNotBlank() && targetAmount.toDoubleOrNull() != null,
                 modifier = Modifier.fillMaxWidth(),
@@ -307,7 +260,7 @@ private fun CreateGoalDialog(onDismiss: () -> Unit, onCreate: (SavingsGoalCreate
 }
 
 @Composable
-private fun ContributeDialog(onDismiss: () -> Unit, onContribute: (Double, (Boolean) -> Unit) -> Unit) {
+private fun ContributeDialog(onDismiss: () -> Unit, onContribute: (Double) -> Unit) {
     var amount by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
 
@@ -345,15 +298,7 @@ private fun ContributeDialog(onDismiss: () -> Unit, onContribute: (Double, (Bool
                         text = if (saving) "Adding..." else "Contribute",
                         onClick = {
                             saving = true
-                            val parsed = amount.toDoubleOrNull()
-                            if (parsed != null) {
-                                onContribute(parsed) { success ->
-                                    saving = false
-                                    if (success) onDismiss()
-                                }
-                            } else {
-                                saving = false
-                            }
+                            amount.toDoubleOrNull()?.let { onContribute(it) }
                         },
                         enabled = !saving && amount.toDoubleOrNull() != null,
                         modifier = Modifier.fillMaxWidth(),

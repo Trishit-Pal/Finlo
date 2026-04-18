@@ -13,112 +13,6 @@ from app.api.exceptions import ResourceConflict, ResourceNotFound
 from app.db.models import Budget, BudgetVersion, Transaction
 from app.dependencies import DB, CurrentUser
 from app.services.audit import log_audit_event
-from app.utils.dates import month_date_range
-
-# ── Rollover helper ───────────────────────────────────────────────────────────
-
-
-async def _apply_rollover(user_id: str, db: Any) -> None:
-    """Carry forward unspent budget from previous month when rollover_enabled=True.
-
-    Called lazily on GET /budgets. Skips months that already have a rollover
-    BudgetVersion so the operation is idempotent.
-    """
-    from datetime import date
-
-    today = date.today()
-    cur_month, cur_year = today.month, today.year
-    # Compute previous month
-    if cur_month == 1:
-        prev_month, prev_year = 12, cur_year - 1
-    else:
-        prev_month, prev_year = cur_month - 1, cur_year
-
-    # Find rollover-enabled budgets from last month
-    prev_result = await db.execute(
-        select(Budget).where(
-            Budget.user_id == user_id,
-            Budget.month == prev_month,
-            Budget.year == prev_year,
-            Budget.rollover_enabled.is_(True),
-        )
-    )
-    prev_budgets = prev_result.scalars().all()
-    if not prev_budgets:
-        return
-
-    for prev_b in prev_budgets:
-        # Skip if a rollover version already exists for current month/category
-        rollover_check = await db.execute(
-            select(BudgetVersion).where(
-                BudgetVersion.user_id == user_id,
-                BudgetVersion.category == prev_b.category,
-                BudgetVersion.month == cur_month,
-                BudgetVersion.year == cur_year,
-                BudgetVersion.change_reason == "rollover",
-            )
-        )
-        if rollover_check.scalar_one_or_none():
-            continue
-
-        # Compute last month's actual spend
-        d_start, d_end = month_date_range(prev_year, prev_month)
-        spent_res = await db.execute(
-            select(func.coalesce(func.sum(Transaction.amount), 0.0)).where(
-                Transaction.user_id == user_id,
-                Transaction.category == prev_b.category,
-                Transaction.type == "expense",
-                Transaction.date >= d_start,
-                Transaction.date < d_end,
-            )
-        )
-        spent = float(spent_res.scalar_one())
-        surplus = prev_b.limit_amount - spent
-        if surplus <= 0:
-            continue
-
-        # Find or create current month's budget for this category
-        cur_result = await db.execute(
-            select(Budget).where(
-                Budget.user_id == user_id,
-                Budget.category == prev_b.category,
-                Budget.month == cur_month,
-                Budget.year == cur_year,
-            )
-        )
-        cur_b = cur_result.scalar_one_or_none()
-        if cur_b:
-            cur_b.limit_amount = round(cur_b.limit_amount + surplus, 2)
-            db.add(cur_b)
-            await db.flush()
-        else:
-            cur_b = Budget(
-                user_id=user_id,
-                month=cur_month,
-                year=cur_year,
-                category=prev_b.category,
-                limit_amount=round(prev_b.limit_amount + surplus, 2),
-                soft_alert=prev_b.soft_alert,
-                hard_alert=prev_b.hard_alert,
-                rollover_enabled=True,
-            )
-            db.add(cur_b)
-            await db.flush()
-
-        # Record rollover snapshot so we don't repeat
-        db.add(
-            BudgetVersion(
-                budget_id=cur_b.id,
-                user_id=user_id,
-                month=cur_month,
-                year=cur_year,
-                category=prev_b.category,
-                version=cur_b.version or 1,
-                snapshot=_budget_snapshot(cur_b),
-                change_reason="rollover",
-            )
-        )
-        await db.flush()
 
 router = APIRouter()
 
@@ -186,13 +80,11 @@ async def _batch_enrich_budgets(budgets: list[Budget], db: Any) -> list[BudgetOu
         return []
 
     user_id = budgets[0].user_id
+    month_prefixes = {f"{b.year:04d}-{b.month:02d}" for b in budgets}
     categories = {b.category for b in budgets}
 
-    date_ranges = [month_date_range(b.year, b.month) for b in budgets]
-    overall_start = min(r[0] for r in date_ranges)
-    overall_end = max(r[1] for r in date_ranges)
-
-    from sqlalchemy import literal_column
+    prefix_filters = [Transaction.date.like(f"{p}%") for p in month_prefixes]
+    from sqlalchemy import literal_column, or_
 
     spend_query = (
         select(
@@ -203,8 +95,7 @@ async def _batch_enrich_budgets(budgets: list[Budget], db: Any) -> list[BudgetOu
         .where(
             Transaction.user_id == user_id,
             Transaction.category.in_(categories),
-            Transaction.date >= overall_start,
-            Transaction.date < overall_end,
+            or_(*prefix_filters),
         )
         .group_by(Transaction.category, literal_column("month_prefix"))
     )
@@ -234,9 +125,7 @@ async def _batch_enrich_budgets(budgets: list[Budget], db: Any) -> list[BudgetOu
 
         # Logic for can_edit: allowed if (no edits yet OR within 24-hour grace period)
         now = datetime.now(timezone.utc)
-        is_grace_period = (
-            now - budget.created_at.replace(tzinfo=timezone.utc)
-        ) < timedelta(hours=24)
+        is_grace_period = (now - budget.created_at.replace(tzinfo=timezone.utc)) < timedelta(hours=24)
         out.can_edit = (budget.edit_count or 0) < 1 or is_grace_period
 
         result.append(out)
@@ -257,9 +146,7 @@ def _budget_snapshot(budget: Budget) -> dict[str, Any]:
         "is_percentage": budget.is_percentage,
         "edit_count": budget.edit_count,
         "version": budget.version,
-        "last_edited_at": budget.last_edited_at.isoformat()
-        if budget.last_edited_at
-        else None,
+        "last_edited_at": budget.last_edited_at.isoformat() if budget.last_edited_at else None,
     }
 
 
@@ -284,9 +171,7 @@ async def _enrich_budget(budget: Budget, db: Any) -> BudgetOut:
 
 
 @router.post("", response_model=BudgetOut, status_code=status.HTTP_201_CREATED)
-async def create_budget(
-    body: BudgetCreate, request: Request, current_user: CurrentUser, db: DB
-) -> BudgetOut:
+async def create_budget(body: BudgetCreate, request: Request, current_user: CurrentUser, db: DB) -> BudgetOut:
     existing = await db.execute(
         select(Budget).where(
             Budget.user_id == current_user.id,
@@ -319,11 +204,7 @@ async def create_budget(
         action="budget.created",
         resource_type="budget",
         resource_id=budget.id,
-        metadata={
-            "month": budget.month,
-            "year": budget.year,
-            "category": budget.category,
-        },
+        metadata={"month": budget.month, "year": budget.year, "category": budget.category},
         request=request,
     )
     return await _enrich_budget(budget, db)
@@ -336,29 +217,15 @@ async def list_budgets(
     month: Optional[int] = None,
     year: Optional[int] = None,
 ) -> BudgetListResponse:
-    from app.services.cache import cache_get, cache_set
-
-    cache_key = f"user:{current_user.id}:budgets:{month or 'all'}:{year or 'all'}"
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return BudgetListResponse(**cached)
-
-    # Apply rollover from previous month (idempotent)
-    await _apply_rollover(current_user.id, db)
-
     query = select(Budget).where(Budget.user_id == current_user.id)
     if month:
         query = query.where(Budget.month == month)
     if year:
         query = query.where(Budget.year == year)
 
-    result = await db.execute(
-        query.order_by(Budget.year.desc(), Budget.month.desc(), Budget.category.asc())
-    )
+    result = await db.execute(query.order_by(Budget.year.desc(), Budget.month.desc(), Budget.category.asc()))
     budgets = result.scalars().all()
-    resp = BudgetListResponse(items=await _batch_enrich_budgets(list(budgets), db))
-    await cache_set(cache_key, resp.model_dump(), ttl=60)
-    return resp
+    return BudgetListResponse(items=await _batch_enrich_budgets(list(budgets), db))
 
 
 @router.patch("/{budget_id}", response_model=BudgetOut)
@@ -369,9 +236,7 @@ async def update_budget(
     current_user: CurrentUser,
     db: DB,
 ) -> BudgetOut:
-    query = select(Budget).where(
-        Budget.id == budget_id, Budget.user_id == current_user.id
-    )
+    query = select(Budget).where(Budget.id == budget_id, Budget.user_id == current_user.id)
     bind = db.get_bind()
     if bind.dialect.name != "sqlite":
         query = query.with_for_update()
@@ -382,15 +247,10 @@ async def update_budget(
         raise ResourceNotFound("Budget")
 
     now = datetime.now(timezone.utc)
-    is_grace_period = (
-        now - budget.created_at.replace(tzinfo=timezone.utc)
-    ) < timedelta(hours=24)
+    is_grace_period = (now - budget.created_at.replace(tzinfo=timezone.utc)) < timedelta(hours=24)
 
     if (budget.edit_count or 0) >= 1 and not is_grace_period:
-        raise ResourceConflict(
-            "Monthly budget can be edited only once "
-            "after 24-hour grace period"
-        )
+        raise ResourceConflict("Monthly budget can be edited only once for this month after 24-hour grace period")
 
     changed = False
     if body.limit_amount is not None:
@@ -425,11 +285,7 @@ async def update_budget(
             action="budget.updated",
             resource_type="budget",
             resource_id=budget.id,
-            metadata={
-                "month": budget.month,
-                "year": budget.year,
-                "edit_count": budget.edit_count,
-            },
+            metadata={"month": budget.month, "year": budget.year, "edit_count": budget.edit_count},
             request=request,
         )
 
@@ -437,27 +293,18 @@ async def update_budget(
 
 
 @router.get("/{budget_id}/history", response_model=list[BudgetVersionOut])
-async def get_budget_history(
-    budget_id: str, current_user: CurrentUser, db: DB
-) -> list[BudgetVersionOut]:
+async def get_budget_history(budget_id: str, current_user: CurrentUser, db: DB) -> list[BudgetVersionOut]:
     result = await db.execute(
         select(BudgetVersion)
-        .where(
-            BudgetVersion.budget_id == budget_id,
-            BudgetVersion.user_id == current_user.id,
-        )
+        .where(BudgetVersion.budget_id == budget_id, BudgetVersion.user_id == current_user.id)
         .order_by(BudgetVersion.version.asc())
     )
     return [BudgetVersionOut.model_validate(v) for v in result.scalars().all()]
 
 
 @router.delete("/{budget_id}", status_code=status.HTTP_200_OK)
-async def delete_budget(
-    budget_id: str, request: Request, current_user: CurrentUser, db: DB
-) -> dict:
-    result = await db.execute(
-        select(Budget).where(Budget.id == budget_id, Budget.user_id == current_user.id)
-    )
+async def delete_budget(budget_id: str, request: Request, current_user: CurrentUser, db: DB) -> dict:
+    result = await db.execute(select(Budget).where(Budget.id == budget_id, Budget.user_id == current_user.id))
     budget = result.scalar_one_or_none()
     if not budget:
         raise ResourceNotFound("Budget")
@@ -468,11 +315,7 @@ async def delete_budget(
         action="budget.deleted",
         resource_type="budget",
         resource_id=budget_id,
-        metadata={
-            "month": budget.month,
-            "year": budget.year,
-            "category": budget.category,
-        },
+        metadata={"month": budget.month, "year": budget.year, "category": budget.category},
         request=request,
     )
     return {"detail": "Budget deleted"}

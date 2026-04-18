@@ -1,5 +1,4 @@
 """Unit tests for the categorizer service."""
-
 from __future__ import annotations
 
 import pytest
@@ -12,7 +11,6 @@ from app.services.categorizer import (
 )
 
 # ── Merchant lookup ───────────────────────────────────────────────────────────
-
 
 def test_lookup_walmart():
     assert _lookup_merchant("Walmart Supercenter") == "Groceries"
@@ -42,13 +40,10 @@ def test_lookup_case_insensitive():
 def test_all_lookup_values_have_valid_categories():
     valid_categories = set(CATEGORY_SEEDS.keys()) | {"Shopping", "Housing", "Other"}
     for merchant, cat in MERCHANT_CATEGORY_MAP.items():
-        assert (
-            cat in valid_categories
-        ), f"Unknown category '{cat}' for merchant '{merchant}'"
+        assert cat in valid_categories, f"Unknown category '{cat}' for merchant '{merchant}'"
 
 
 # ── categorize_single (sync path — no LLM key set in test env) ───────────────
-
 
 @pytest.mark.asyncio
 async def test_categorize_walmart():
@@ -82,7 +77,6 @@ async def test_categorize_returns_dict():
 @pytest.mark.asyncio
 async def test_categorize_items_list():
     from app.services.categorizer import categorize_items
-
     items = [
         {"name": "Organic Bananas", "price": 1.49, "quantity": 1.0, "confidence": 0.9},
         {"name": "Greek Yogurt", "price": 4.99, "quantity": 1.0, "confidence": 0.85},

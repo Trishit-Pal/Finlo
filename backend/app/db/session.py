@@ -1,5 +1,4 @@
 """Async SQLAlchemy session factory and DB initialization."""
-
 from __future__ import annotations
 
 import logging
@@ -12,26 +11,9 @@ from app.db.models import Base
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-_db_url = settings.get_database_url
-_is_pg = "asyncpg" in _db_url or ("postgresql" in _db_url and "aiosqlite" not in _db_url)
-_connect_args: dict = {}
-if _is_pg:
-    _connect_args["prepared_statement_cache_size"] = 0
-
-_pool_kwargs: dict = {}
-if _is_pg:
-    _pool_kwargs.update(
-        pool_size=settings.DB_POOL_SIZE,
-        max_overflow=settings.DB_MAX_OVERFLOW,
-        pool_recycle=settings.DB_POOL_RECYCLE,
-        pool_pre_ping=True,
-    )
-
 engine = create_async_engine(
-    _db_url,
-    echo=False,
-    connect_args=_connect_args,
-    **_pool_kwargs,
+    settings.get_database_url,
+    echo=settings.ENVIRONMENT == "development",
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -52,11 +34,7 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         try:
             if conn.dialect.name == "postgresql":
-                await conn.execute(
-                    __import__("sqlalchemy").text(
-                        "CREATE EXTENSION IF NOT EXISTS vector"
-                    )
-                )
+                await conn.execute(__import__("sqlalchemy").text("CREATE EXTENSION IF NOT EXISTS vector"))
         except Exception as exc:
             logger.warning("Failed to ensure vector extension: %s", exc)
         await conn.run_sync(Base.metadata.create_all)
