@@ -1,14 +1,27 @@
-﻿"""Receipts API: upload, OCR, duplicate detection, confirm edits, list."""
+"""Receipts API: upload, OCR, duplicate detection, confirm edits, list."""
 
 import hashlib
 import json
+import os
+import re
+import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.exceptions import FileTooLarge, ResourceNotFound, UnsupportedFileType
 from app.config import get_settings
@@ -22,9 +35,17 @@ from app.services.parser import parse_receipt_with_llm_fallback
 from app.services.storage import StorageService
 
 settings = get_settings()
+_limiter = Limiter(key_func=get_remote_address)
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 storage = StorageService()
+
+ALLOWED_IMAGE_MAGIC = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG": "image/png",
+    b"%PDF": "application/pdf",
+}
+
+MAX_CLIENT_OCR_JSON_BYTES = 1_048_576  # 1 MB
 
 
 class ParsedItem(BaseModel):
@@ -144,7 +165,9 @@ async def _detect_duplicate_receipt(
         Receipt.date == parsed.date,
     )
     if parsed.merchant:
-        heuristic_query = heuristic_query.where(func.lower(Receipt.merchant) == parsed.merchant.lower())
+        heuristic_query = heuristic_query.where(
+            func.lower(Receipt.merchant) == parsed.merchant.lower()
+        )
     heuristic_query = heuristic_query.order_by(Receipt.created_at.desc()).limit(1)
     heuristic_result = await db.execute(heuristic_query)
     heuristic = heuristic_result.scalar_one_or_none()
@@ -153,8 +176,20 @@ async def _detect_duplicate_receipt(
     return None, None
 
 
-@router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("30/minute")
+def _validate_magic_bytes(raw_bytes: bytes, declared_type: str) -> None:
+    """Verify that file content matches declared Content-Type via magic bytes."""
+    for magic, mime in ALLOWED_IMAGE_MAGIC.items():
+        if raw_bytes[: len(magic)] == magic:
+            return
+    raise UnsupportedFileType(
+        f"File content does not match an allowed type (declared: {declared_type})"
+    )
+
+
+@router.post(
+    "/upload", response_model=UploadResponse, status_code=status.HTTP_201_CREATED
+)
+@_limiter.limit("10/minute")
 async def upload_receipt(
     request: Request,
     current_user: CurrentUser,
@@ -170,11 +205,18 @@ async def upload_receipt(
     raw_ocr_text: Optional[str] = None
 
     if client_side_ocr and parsed_json:
+        if len(parsed_json.encode("utf-8")) > MAX_CLIENT_OCR_JSON_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Client OCR payload exceeds 1 MB limit",
+            )
         source_hash = _compute_source_hash(parsed_json.encode("utf-8"))
         client_data = json.loads(parsed_json)
         adapter = ClientOCRAdapter()
         ocr_result = adapter.parse(client_data)
-        parsed = await parse_receipt_with_llm_fallback(ocr_result.lines, ocr_result.confidence)
+        parsed = await parse_receipt_with_llm_fallback(
+            ocr_result.lines, ocr_result.confidence
+        )
         ocr_confidence = ocr_result.confidence
         raw_ocr_text = ocr_result.raw_text
     elif file is not None:
@@ -185,13 +227,21 @@ async def upload_receipt(
         raw_bytes = await file.read()
         if len(raw_bytes) > settings.max_upload_bytes:
             raise FileTooLarge(settings.MAX_UPLOAD_SIZE_MB)
+
+        _validate_magic_bytes(raw_bytes, content_type)
         source_hash = _compute_source_hash(raw_bytes)
 
-        user_wants_storage = store_raw_image or (current_user.settings or {}).get("store_raw_images", False)
+        user_wants_storage = store_raw_image or (current_user.settings or {}).get(
+            "store_raw_images", False
+        )
         if user_wants_storage:
-            import os
-
-            safe_filename = os.path.basename(file.filename or "upload").replace("..", "")
+            # Always assign a random object key; user-controlled filenames
+            # are never reflected back into the storage key. We preserve
+            # the extension for content-sniffing hints only.
+            original = os.path.basename(file.filename or "")
+            ext_match = re.search(r"\.([A-Za-z0-9]{1,8})$", original)
+            ext = ext_match.group(1).lower() if ext_match else "bin"
+            safe_filename = f"{uuid.uuid4().hex}.{ext}"
             raw_image_url = await storage.upload_encrypted(
                 data=raw_bytes,
                 key=f"{current_user.id}/{safe_filename}",
@@ -200,7 +250,9 @@ async def upload_receipt(
 
         adapter = ServerOCRAdapter()
         ocr_result = adapter.parse_bytes(raw_bytes, content_type)
-        parsed = await parse_receipt_with_llm_fallback(ocr_result.lines, ocr_result.confidence)
+        parsed = await parse_receipt_with_llm_fallback(
+            ocr_result.lines, ocr_result.confidence
+        )
         ocr_confidence = ocr_result.confidence
         raw_ocr_text = ocr_result.raw_text
     else:
@@ -223,6 +275,19 @@ async def upload_receipt(
             source_hash=source_hash,
             parsed=parsed,
         )
+        # Block re-upload of an already-confirmed receipt (exact hash match only)
+        if duplicate_confidence == 1.0 and duplicate_of_receipt_id:
+            confirmed_check = await db.execute(
+                select(Receipt).where(
+                    Receipt.id == duplicate_of_receipt_id,
+                    Receipt.status == "confirmed",
+                )
+            )
+            if confirmed_check.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This receipt has already been uploaded and confirmed.",
+                )
 
     receipt = Receipt(
         user_id=current_user.id,
@@ -281,9 +346,15 @@ async def upload_receipt(
 
 
 @router.post("/confirm", response_model=ConfirmResponse)
-async def confirm_receipt(body: ConfirmRequest, request: Request, current_user: CurrentUser, db: DB) -> ConfirmResponse:
-    """Apply user edits, reclassify, generate coach suggestions, and create transaction once."""
-    result = await db.execute(select(Receipt).where(Receipt.id == body.receipt_id, Receipt.user_id == current_user.id))
+async def confirm_receipt(
+    body: ConfirmRequest, request: Request, current_user: CurrentUser, db: DB
+) -> ConfirmResponse:
+    """Apply user edits, reclassify, and create transaction."""
+    result = await db.execute(
+        select(Receipt).where(
+            Receipt.id == body.receipt_id, Receipt.user_id == current_user.id
+        )
+    )
     receipt = result.scalar_one_or_none()
     if not receipt:
         raise ResourceNotFound("Receipt")
@@ -311,7 +382,9 @@ async def confirm_receipt(body: ConfirmRequest, request: Request, current_user: 
 
     existing_txn_result = await db.execute(
         select(Transaction)
-        .where(Transaction.user_id == current_user.id, Transaction.receipt_id == receipt.id)
+        .where(
+            Transaction.user_id == current_user.id, Transaction.receipt_id == receipt.id
+        )
         .limit(1)
     )
     existing_txn = existing_txn_result.scalar_one_or_none()
@@ -330,15 +403,31 @@ async def confirm_receipt(body: ConfirmRequest, request: Request, current_user: 
             date=receipt.date or "",
             merchant=receipt.merchant or "",
             amount=receipt.total,
-            category=receipt.category_suggestion or (receipt.items[0].get("category") if receipt.items else None),
+            category=receipt.category_suggestion
+            or (receipt.items[0].get("category") if receipt.items else None),
             source="receipt",
             receipt_id=receipt.id,
             notes=("; ".join(notes_parts) or None),
         )
         db.add(txn)
-        await db.flush()
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            dup_result = await db.execute(
+                select(Transaction).where(
+                    Transaction.receipt_id == receipt.id
+                ).limit(1)
+            )
+            existing_txn = dup_result.scalar_one_or_none()
 
-    categories = list({item.get("category", "Uncategorized") for item in (receipt.items or []) if item.get("category")})
+    categories = list(
+        {
+            item.get("category", "Uncategorized")
+            for item in (receipt.items or [])
+            if item.get("category")
+        }
+    )
 
     coach_output = None
     try:
@@ -376,7 +465,12 @@ async def confirm_receipt(body: ConfirmRequest, request: Request, current_user: 
 
 
 @router.get("/receipts", response_model=ReceiptListResponse)
-async def list_receipts(current_user: CurrentUser, db: DB, limit: int = 20, offset: int = 0) -> ReceiptListResponse:
+async def list_receipts(
+    current_user: CurrentUser,
+    db: DB,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> ReceiptListResponse:
     query = (
         select(Receipt)
         .where(Receipt.user_id == current_user.id)
@@ -392,7 +486,11 @@ async def list_receipts(current_user: CurrentUser, db: DB, limit: int = 20, offs
 
 @router.get("/receipts/{receipt_id}", response_model=ReceiptOut)
 async def get_receipt(receipt_id: str, current_user: CurrentUser, db: DB) -> ReceiptOut:
-    result = await db.execute(select(Receipt).where(Receipt.id == receipt_id, Receipt.user_id == current_user.id))
+    result = await db.execute(
+        select(Receipt).where(
+            Receipt.id == receipt_id, Receipt.user_id == current_user.id
+        )
+    )
     receipt = result.scalar_one_or_none()
     if not receipt:
         raise ResourceNotFound("Receipt")
@@ -400,8 +498,14 @@ async def get_receipt(receipt_id: str, current_user: CurrentUser, db: DB) -> Rec
 
 
 @router.delete("/receipts/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_receipt(receipt_id: str, request: Request, current_user: CurrentUser, db: DB) -> None:
-    result = await db.execute(select(Receipt).where(Receipt.id == receipt_id, Receipt.user_id == current_user.id))
+async def delete_receipt(
+    receipt_id: str, request: Request, current_user: CurrentUser, db: DB
+) -> None:
+    result = await db.execute(
+        select(Receipt).where(
+            Receipt.id == receipt_id, Receipt.user_id == current_user.id
+        )
+    )
     receipt = result.scalar_one_or_none()
     if not receipt:
         raise ResourceNotFound("Receipt")
@@ -423,4 +527,3 @@ async def delete_receipt(receipt_id: str, request: Request, current_user: Curren
         },
         request=request,
     )
-

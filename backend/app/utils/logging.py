@@ -41,7 +41,9 @@ def setup_logging():
 
     root_logger = logging.getLogger()
     root_logger.addHandler(handler)
-    root_logger.setLevel(logging.INFO if settings.ENVIRONMENT == "production" else logging.DEBUG)
+    root_logger.setLevel(
+        logging.INFO if settings.ENVIRONMENT == "production" else logging.DEBUG
+    )
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -58,8 +60,12 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
         process_time = time.time() - start_time
 
-        # Echo request ID back to client for correlation
+        # Echo request ID and timing back to client for correlation
         response.headers["X-Request-ID"] = request_id
+        response.headers["X-Response-Time"] = f"{round(process_time * 1000)}ms"
+
+        from app.services.metrics import metrics
+        metrics.record(request.url.path, response.status_code, process_time)
 
         log_data = {
             "method": request.method,
@@ -75,7 +81,11 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         else:
             access_logger.info(
                 "[%s] %s %s - %s (%.4fs)",
-                request_id[:8], request.method, request.url.path, response.status_code, process_time,
+                request_id[:8],
+                request.method,
+                request.url.path,
+                response.status_code,
+                process_time,
             )
 
         return response

@@ -1,7 +1,12 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { User, AuthResponse } from '../types';
-import { api, getStoredToken, clearStoredTokens, setStoredTokens } from '../services/api';
-import { identifyUser, resetUser } from '../services/posthog';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import type { User, AuthResponse } from "../types";
+import {
+  api,
+  getStoredToken,
+  clearStoredTokens,
+  setStoredTokens,
+} from "../services/api";
+import { identifyUser, resetUser } from "../services/posthog";
 
 type AuthContextType = {
   user: User | null;
@@ -13,7 +18,9 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -24,7 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     try {
-      const { data } = await api.get('/auth/me');
+      const { data } = await api.get("/auth/me");
       setUser(data);
     } catch {
       clearStoredTokens();
@@ -43,8 +50,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleUnauthorized = () => {
       setUser(null);
     };
-    window.addEventListener('auth:unauthorized', handleUnauthorized);
-    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
+    return () =>
+      window.removeEventListener("auth:unauthorized", handleUnauthorized);
   }, []);
 
   const setAuth = (data: AuthResponse) => {
@@ -60,7 +68,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, setAuth, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, loading, setAuth, logout, refreshUser }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -69,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };

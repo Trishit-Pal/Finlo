@@ -16,6 +16,7 @@ data class TransactionsUiState(
     val transactions: List<TransactionDto> = emptyList(),
     val searchQuery: String = "",
     val filterCategory: String = "",
+    val error: String? = null,
 )
 
 @HiltViewModel
@@ -26,14 +27,16 @@ class TransactionsViewModel @Inject constructor(private val api: FinloApi) : Vie
 
     init { load() }
 
+    fun clearError() { _state.value = _state.value.copy(error = null) }
+
     fun load() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true)
+            _state.value = _state.value.copy(loading = true, error = null)
             try {
                 val res = api.getTransactions(limit = 100)
                 _state.value = _state.value.copy(loading = false, transactions = res.items)
             } catch (e: Exception) {
-                _state.value = _state.value.copy(loading = false)
+                _state.value = _state.value.copy(loading = false, error = "Failed to load transactions")
             }
         }
     }
@@ -50,31 +53,50 @@ class TransactionsViewModel @Inject constructor(private val api: FinloApi) : Vie
 
     fun delete(id: String) {
         val backup = _state.value.transactions
-        _state.value = _state.value.copy(transactions = backup.filter { it.id != id })
+        _state.value = _state.value.copy(transactions = backup.filter { it.id != id }, error = null)
         viewModelScope.launch {
             try { api.deleteTransaction(id) } catch (_: Exception) {
-                _state.value = _state.value.copy(transactions = backup)
+                _state.value = _state.value.copy(transactions = backup, error = "Failed to delete transaction")
             }
         }
     }
 
     fun createTransaction(req: TransactionCreateRequest, onDone: () -> Unit) {
         viewModelScope.launch {
+            _state.value = _state.value.copy(error = null)
             try {
                 api.createTransaction(req)
                 load()
                 onDone()
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                _state.value = _state.value.copy(error = "Failed to create transaction")
+            }
         }
     }
 
     fun updateTransaction(id: String, fields: Map<String, Any?>, onDone: () -> Unit) {
         viewModelScope.launch {
+            _state.value = _state.value.copy(error = null)
             try {
                 api.updateTransaction(id, fields)
                 load()
                 onDone()
-            } catch (_: Exception) {}
+            } catch (_: Exception) {
+                _state.value = _state.value.copy(error = "Failed to update transaction")
+            }
+        }
+    }
+
+    fun loadTransaction(id: String, onLoaded: (TransactionDto) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val all = api.getTransactions(limit = 200)
+                val txn = all.items.find { it.id == id }
+                if (txn != null) onLoaded(txn)
+                else _state.value = _state.value.copy(error = "Transaction not found")
+            } catch (_: Exception) {
+                _state.value = _state.value.copy(error = "Failed to load transaction details")
+            }
         }
     }
 }

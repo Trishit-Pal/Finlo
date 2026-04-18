@@ -1,9 +1,11 @@
 """Debts & Loans API: track loans, credit cards, IOUs."""
+
+from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.exceptions import ResourceNotFound
 from app.db.models import Debt
@@ -53,7 +55,7 @@ class DebtOut(BaseModel):
     next_due_date: Optional[str]
     lender_name: Optional[str]
     is_settled: bool
-    created_at: str
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -64,12 +66,23 @@ class PaymentLog(BaseModel):
     note: Optional[str] = Field(None, max_length=500)
 
 
-@router.get("", response_model=list[DebtOut])
-async def list_debts(current_user: CurrentUser, db: DB) -> list[DebtOut]:
-    result = await db.execute(
-        select(Debt).where(Debt.user_id == current_user.id).order_by(Debt.created_at.desc())
-    )
-    return [DebtOut.model_validate(d) for d in result.scalars().all()]
+@router.get("")
+async def list_debts(
+    current_user: CurrentUser,
+    db: DB,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> dict:
+    q = select(Debt).where(Debt.user_id == current_user.id)
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
+    q = q.order_by(Debt.created_at.desc()).limit(limit).offset(offset)
+    result = await db.execute(q)
+    return {
+        "items": [DebtOut.model_validate(d) for d in result.scalars().all()],
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+    }
 
 
 @router.post("", response_model=DebtOut, status_code=status.HTTP_201_CREATED)
@@ -135,6 +148,61 @@ async def delete_debt(debt_id: str, current_user: CurrentUser, db: DB) -> dict:
         raise ResourceNotFound("Debt")
     await db.delete(debt)
     return {"detail": "Debt deleted"}
+
+
+@router.get("/{debt_id}/schedule")
+async def debt_amortization_schedule(
+    debt_id: str,
+    current_user: CurrentUser,
+    db: DB,
+    months: int = Query(24, ge=1, le=360),
+) -> dict:
+    """Return a month-by-month amortization table for a loan/debt.
+
+    Works for any debt with interest_rate + emi_amount. For zero-interest
+    debts it returns a simple principal-only schedule.
+    """
+    result = await db.execute(
+        select(Debt).where(Debt.id == debt_id, Debt.user_id == current_user.id)
+    )
+    debt = result.scalar_one_or_none()
+    if not debt:
+        raise ResourceNotFound("Debt")
+
+    balance = debt.remaining_balance
+    emi = debt.emi_amount or 0.0
+    annual_rate = debt.interest_rate or 0.0
+    monthly_rate = annual_rate / 100.0 / 12.0
+
+    schedule = []
+    for month_num in range(1, months + 1):
+        if balance <= 0:
+            break
+        interest = round(balance * monthly_rate, 2)
+        principal = round(min(emi - interest, balance), 2) if emi > interest else 0.0
+        payment = round(interest + principal, 2) if emi > 0 else 0.0
+        balance = round(max(balance - principal, 0.0), 2)
+        schedule.append(
+            {
+                "month": month_num,
+                "payment": payment,
+                "principal": principal,
+                "interest": interest,
+                "remaining_balance": balance,
+            }
+        )
+
+    total_interest = round(sum(s["interest"] for s in schedule), 2)
+    return {
+        "debt_id": debt_id,
+        "name": debt.name,
+        "opening_balance": debt.remaining_balance,
+        "emi_amount": emi,
+        "annual_interest_rate": annual_rate,
+        "schedule": schedule,
+        "total_interest": total_interest,
+        "payoff_months": len(schedule),
+    }
 
 
 @router.get("/summary")

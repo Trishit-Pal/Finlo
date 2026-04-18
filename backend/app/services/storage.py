@@ -1,4 +1,5 @@
 """Encrypted object storage adapter (MinIO/S3)."""
+
 from __future__ import annotations
 
 import logging
@@ -11,12 +12,14 @@ logger = logging.getLogger(__name__)
 class StorageService:
     def __init__(self) -> None:
         from app.config import get_settings
+
         self._settings = get_settings()
         self._client = None
 
     def _get_client(self):
         if self._client is None:
             import boto3
+
             self._client = boto3.client(
                 "s3",
                 endpoint_url=self._settings.STORAGE_ENDPOINT,
@@ -30,6 +33,7 @@ class StorageService:
         """AES-256-GCM encryption for raw image bytes."""
         try:
             from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
             key_hex = self._settings.STORAGE_ENCRYPTION_KEY
             key = bytes.fromhex(key_hex[:64])  # 32 bytes
             nonce = os.urandom(12)
@@ -43,6 +47,7 @@ class StorageService:
     def _decrypt(self, data: bytes) -> bytes:
         """Decrypt AES-256-GCM encrypted bytes."""
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
         key_hex = self._settings.STORAGE_ENCRYPTION_KEY
         key = bytes.fromhex(key_hex[:64])
         nonce = data[:12]
@@ -53,6 +58,7 @@ class StorageService:
     async def upload_encrypted(self, data: bytes, key: str, content_type: str) -> str:
         """Encrypt and upload to object storage. Returns public/internal URL."""
         import asyncio
+
         encrypted = self._encrypt(data)
         bucket = self._settings.STORAGE_BUCKET
         s3_key = f"encrypted/{key}"
@@ -73,6 +79,7 @@ class StorageService:
     async def download_decrypted(self, key: str) -> bytes:
         """Download and decrypt an object."""
         import asyncio
+
         bucket = self._settings.STORAGE_BUCKET
 
         loop = asyncio.get_running_loop()
@@ -86,6 +93,7 @@ class StorageService:
     async def delete(self, key: str) -> None:
         """Delete an object (for GDPR compliance)."""
         import asyncio
+
         bucket = self._settings.STORAGE_BUCKET
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(

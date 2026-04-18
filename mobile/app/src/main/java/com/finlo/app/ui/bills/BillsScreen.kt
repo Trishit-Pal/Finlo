@@ -34,26 +34,46 @@ class BillsViewModel @Inject constructor(private val api: FinloApi) : ViewModel(
     val bills = _bills.asStateFlow()
     private val _loading = MutableStateFlow(true)
     val loading = _loading.asStateFlow()
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage = _errorMessage.asStateFlow()
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
 
     init { load() }
 
     fun load() {
         viewModelScope.launch {
             _loading.value = true
-            try { _bills.value = api.getBills() } catch (_: Exception) {}
+            try {
+                _bills.value = api.getBills()
+            } catch (_: Exception) {
+                _errorMessage.value = "Failed to load bills. Check your connection and try again."
+            }
             _loading.value = false
         }
     }
 
     fun markPaid(id: String) {
         viewModelScope.launch {
-            try { api.markBillPaid(id); load() } catch (_: Exception) {}
+            try {
+                api.markBillPaid(id)
+                load()
+            } catch (_: Exception) {
+                _errorMessage.value = "Failed to mark bill as paid."
+            }
         }
     }
 
     fun delete(id: String) {
         viewModelScope.launch {
-            try { api.deleteBill(id); load() } catch (_: Exception) {}
+            try {
+                api.deleteBill(id)
+                load()
+            } catch (_: Exception) {
+                _errorMessage.value = "Failed to delete bill."
+            }
         }
     }
 }
@@ -62,11 +82,24 @@ class BillsViewModel @Inject constructor(private val api: FinloApi) : ViewModel(
 fun BillsScreen(viewModel: BillsViewModel = hiltViewModel()) {
     val bills by viewModel.bills.collectAsState()
     val loading by viewModel.loading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
     val today = java.time.LocalDate.now().toString()
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Text("Bills & Reminders", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Foreground)
         Text("Track recurring bills and due dates", style = MaterialTheme.typography.bodySmall, color = Muted)
+
+        errorMessage?.let { msg ->
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(msg, color = Danger, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = { viewModel.clearError() }) { Text("Dismiss", fontSize = 12.sp) }
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
 

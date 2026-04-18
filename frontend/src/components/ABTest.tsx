@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { useExperiment } from '../context/ABTestContext';
+import React, { type ReactNode } from "react";
+import { useExperiment } from "../context/ABTestContext";
 
 interface ExperimentProps {
   name: string;
@@ -26,16 +26,16 @@ export const Experiment = ({ name, children }: ExperimentProps) => {
         if (child.props.name === activeVariant) {
           selectedVariant = child;
         }
-        if (child.props.name === 'A') {
+        if (child.props.name === "A") {
           defaultVariant = child;
         }
       }
     }
-  } else {
-      // @ts-ignore
-    if (children && children.props && children.props.name === activeVariant) {
-      selectedVariant = children;
-    }
+  } else if (
+    React.isValidElement<VariantProps>(children) &&
+    children.props.name === activeVariant
+  ) {
+    selectedVariant = children;
   }
 
   // Fallback to variant A if the randomized variant wasn't provided safely in the children

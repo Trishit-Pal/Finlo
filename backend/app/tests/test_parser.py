@@ -1,4 +1,5 @@
 """Unit tests for receipt parser."""
+
 from __future__ import annotations
 
 from app.services.parser import (
@@ -14,6 +15,7 @@ from app.services.parser import (
 from app.tests.conftest import SAMPLE_GROCERY_RECEIPT_LINES, SAMPLE_RECEIPT_LINES
 
 # ── Date extraction ───────────────────────────────────────────────────────────
+
 
 def test_extract_date_iso():
     lines = ["Receipt Date: 2024-01-15", "Store: Walmart"]
@@ -45,6 +47,7 @@ def test_extract_date_missing():
 
 # ── Amount extraction ─────────────────────────────────────────────────────────
 
+
 def test_extract_total():
     lines = ["Subtotal  $20.00", "Tax  $1.99", "TOTAL  $21.99"]
     total, conf = _extract_amount(lines, _TOTAL_PATTERNS)
@@ -68,6 +71,7 @@ def test_extract_total_missing():
 
 # ── Merchant extraction ───────────────────────────────────────────────────────
 
+
 def test_extract_merchant_whole_foods():
     date, conf = _extract_merchant(SAMPLE_RECEIPT_LINES)
     assert date is not None
@@ -81,6 +85,7 @@ def test_extract_merchant_trader_joes():
 
 
 # ── Item extraction ───────────────────────────────────────────────────────────
+
 
 def test_extract_items_whole_foods():
     items = _extract_items(SAMPLE_RECEIPT_LINES)
@@ -97,6 +102,7 @@ def test_extract_items_confidence():
 
 # ── Currency extraction ───────────────────────────────────────────────────────
 
+
 def test_extract_currency_usd():
     lines = ["Total $24.90", "Thank you"]
     assert _extract_currency(lines) == "USD"
@@ -108,6 +114,7 @@ def test_extract_currency_default():
 
 
 # ── Full pipeline ─────────────────────────────────────────────────────────────
+
 
 def test_parse_receipt_whole_foods():
     result = parse_receipt(SAMPLE_RECEIPT_LINES, ocr_confidence=0.9)

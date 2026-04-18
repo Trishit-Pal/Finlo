@@ -1,10 +1,11 @@
 """Encryption utilities: Fernet for PII, HMAC blind indexes for lookups."""
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 from app.config import get_settings
 
@@ -28,7 +29,10 @@ def decrypt_value(value: str) -> str:
     raw_cipher = value[4:]
     try:
         return fernet.decrypt(raw_cipher.encode()).decode()
-    except Exception:
+    except (InvalidToken, ValueError):
+        # Either the ciphertext is corrupt/tampered or it was encrypted with a
+        # different key. Returning the opaque payload prevents a decrypt failure
+        # from crashing the request while keeping the issue visible to callers.
         return value
 
 

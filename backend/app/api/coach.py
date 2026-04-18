@@ -10,11 +10,13 @@ from sqlalchemy import select
 from app.api.exceptions import ResourceConflict, ResourceNotFound
 from app.db.models import Budget, Suggestion, Transaction
 from app.dependencies import DB, CurrentUser
+from app.utils.dates import prefix_date_range
 
 router = APIRouter()
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 
 class CoachActionOut(BaseModel):
     text: str
@@ -52,8 +54,11 @@ class DashboardResponse(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+
 @router.get("/suggestions", response_model=list[SuggestionOut])
-async def get_suggestions(current_user: CurrentUser, db: DB, limit: int = Query(5, ge=1, le=50)) -> list[SuggestionOut]:
+async def get_suggestions(
+    current_user: CurrentUser, db: DB, limit: int = Query(5, ge=1, le=50)
+) -> list[SuggestionOut]:
     """Return the latest coach suggestions for the current user."""
     result = await db.execute(
         select(Suggestion)
@@ -83,7 +88,9 @@ async def respond_to_suggestion(
 
     # State machine: only "pending" suggestions can be responded to
     if suggestion.status != "pending":
-        raise ResourceConflict(f"Suggestion already {suggestion.status} — cannot change to {body.action}")
+        raise ResourceConflict(
+            f"Suggestion already {suggestion.status} — cannot change to {body.action}"
+        )
 
     suggestion.status = body.action
     suggestion.user_edit = body.user_edit
@@ -95,22 +102,34 @@ async def respond_to_suggestion(
 
 @router.get("/dashboard", response_model=DashboardResponse)
 async def get_dashboard(current_user: CurrentUser, db: DB) -> DashboardResponse:
-    """Return totals by category, weekly trend, budget status, and latest suggestions."""
+    """Totals by category, weekly trend, budget status."""
     from datetime import date, timedelta
 
-    from sqlalchemy import Date, func, text
+    from sqlalchemy import Date, func
 
     from app.config import get_settings as _get_settings
+    from app.services.cache import cache_get, cache_set
+
     _is_sqlite = "sqlite" in _get_settings().get_database_url
 
     today = date.today()
     month_prefix = today.strftime("%Y-%m")
+
+    cache_key = f"user:{current_user.id}:dashboard:{month_prefix}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return DashboardResponse(**cached)
     four_weeks_ago = (today - timedelta(weeks=4)).isoformat()
 
     # Totals by category (current month)
+    d_start, d_end = prefix_date_range(month_prefix)
     cat_result = await db.execute(
         select(Transaction.category, func.sum(Transaction.amount).label("total"))
-        .where(Transaction.user_id == current_user.id, Transaction.date.like(f"{month_prefix}%"))
+        .where(
+            Transaction.user_id == current_user.id,
+            Transaction.date >= d_start,
+            Transaction.date < d_end,
+        )
         .group_by(Transaction.category)
         .order_by(func.sum(Transaction.amount).desc())
     )
@@ -130,14 +149,13 @@ async def get_dashboard(current_user: CurrentUser, db: DB) -> DashboardResponse:
             week_label.label("week"),
             func.sum(Transaction.amount).label("total"),
         )
-        .where(Transaction.user_id == current_user.id, Transaction.date >= four_weeks_ago)
-        .group_by(text("1"))
-        .order_by(text("1"))
+        .where(
+            Transaction.user_id == current_user.id, Transaction.date >= four_weeks_ago
+        )
+        .group_by(week_label)
+        .order_by(week_label)
     )
-    weekly_trend = [
-        {"week": r.week, "total": round(r.total, 2)}
-        for r in week_result
-    ]
+    weekly_trend = [{"week": r.week, "total": round(r.total, 2)} for r in week_result]
 
     # Budget status (current month) — single aggregated query
     budget_query = select(Budget).where(
@@ -160,7 +178,8 @@ async def get_dashboard(current_user: CurrentUser, db: DB) -> DashboardResponse:
             .where(
                 Transaction.user_id == current_user.id,
                 Transaction.category.in_(budget_categories),
-                Transaction.date.like(f"{month_prefix}%"),
+                Transaction.date >= d_start,
+                Transaction.date < d_end,
             )
             .group_by(Transaction.category)
         )
@@ -198,9 +217,11 @@ async def get_dashboard(current_user: CurrentUser, db: DB) -> DashboardResponse:
     )
     suggestions = [SuggestionOut.model_validate(s) for s in sug_result.scalars().all()]
 
-    return DashboardResponse(
+    resp = DashboardResponse(
         totals_by_category=totals_by_category,
         weekly_trend=weekly_trend,
         budget_status=budget_status,
         coach_suggestions=suggestions,
     )
+    await cache_set(cache_key, resp.model_dump(), ttl=120)
+    return resp

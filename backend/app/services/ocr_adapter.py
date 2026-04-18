@@ -1,4 +1,5 @@
-"""OCR adapter: server-side (Tesseract) and client-side (Tesseract.js) implementations."""
+"""OCR adapter: server-side and client-side implementations."""
+
 from __future__ import annotations
 
 import io
@@ -6,6 +7,22 @@ import logging
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+# Decompression-bomb defence for uploaded images. Pillow defaults to
+# ~178M pixels which is far more than any legitimate receipt needs.
+_MAX_IMAGE_PIXELS = 50_000_000
+
+
+def _apply_pillow_limits() -> None:
+    try:
+        from PIL import Image
+
+        Image.MAX_IMAGE_PIXELS = _MAX_IMAGE_PIXELS
+    except ImportError:
+        pass
+
+
+_apply_pillow_limits()
 
 
 @dataclass
@@ -34,7 +51,9 @@ class ServerOCRAdapter(BaseOCRAdapter):
             import pytesseract
             from PIL import Image
         except ImportError as e:
-            raise RuntimeError("pytesseract and Pillow are required for server OCR") from e
+            raise RuntimeError(
+                "pytesseract and Pillow are required for server OCR"
+            ) from e
 
         if content_type == "application/pdf":
             return self._parse_pdf(data)
@@ -64,7 +83,9 @@ class ServerOCRAdapter(BaseOCRAdapter):
                     if current_line_words:
                         lines.append(" ".join(current_line_words))
                         line_confidences.append(
-                            sum(current_line_confs) / len(current_line_confs) if current_line_confs else 0.0
+                            sum(current_line_confs) / len(current_line_confs)
+                            if current_line_confs
+                            else 0.0
                         )
                     current_line_num = line_num
                     current_line_words = []
@@ -77,13 +98,21 @@ class ServerOCRAdapter(BaseOCRAdapter):
             if current_line_words:
                 lines.append(" ".join(current_line_words))
                 line_confidences.append(
-                    sum(current_line_confs) / len(current_line_confs) if current_line_confs else 0.0
+                    sum(current_line_confs) / len(current_line_confs)
+                    if current_line_confs
+                    else 0.0
                 )
 
-            overall_conf = sum(line_confidences) / len(line_confidences) if line_confidences else 0.0
+            overall_conf = (
+                sum(line_confidences) / len(line_confidences)
+                if line_confidences
+                else 0.0
+            )
             raw_text = "\n".join(lines)
 
-            logger.info(f"Server OCR: {len(lines)} lines, confidence={overall_conf:.2f}")
+            logger.info(
+                f"Server OCR: {len(lines)} lines, confidence={overall_conf:.2f}"
+            )
             return OCRResult(
                 lines=[line for line in lines if line.strip()],
                 confidence=round(overall_conf, 3),
@@ -104,7 +133,9 @@ class ServerOCRAdapter(BaseOCRAdapter):
             with pdfplumber.open(io.BytesIO(data)) as pdf:
                 for page in pdf.pages:
                     text = page.extract_text() or ""
-                    page_lines = [line.strip() for line in text.splitlines() if line.strip()]
+                    page_lines = [
+                        line.strip() for line in text.splitlines() if line.strip()
+                    ]
                     lines.extend(page_lines)
 
             if lines:
@@ -124,7 +155,9 @@ class ServerOCRAdapter(BaseOCRAdapter):
                 img_bytes = pix.tobytes("png")
                 result = self.parse_bytes(img_bytes, "image/png")
                 all_lines.extend(result.lines)
-            return OCRResult(lines=all_lines, confidence=0.75, raw_text="\n".join(all_lines))
+            return OCRResult(
+                lines=all_lines, confidence=0.75, raw_text="\n".join(all_lines)
+            )
         except Exception:
             return OCRResult(lines=lines, confidence=0.5, raw_text="\n".join(lines))
 
@@ -145,8 +178,15 @@ class ClientOCRAdapter(BaseOCRAdapter):
         overall_conf = float(data.get("confidence", 0)) / 100.0
 
         if "lines" in data:
-            lines = [line_obj["text"].strip() for line_obj in data["lines"] if line_obj.get("text", "").strip()]
-            line_confidences = [float(line_obj.get("confidence", 0)) / 100.0 for line_obj in data["lines"]]
+            lines = [
+                line_obj["text"].strip()
+                for line_obj in data["lines"]
+                if line_obj.get("text", "").strip()
+            ]
+            line_confidences = [
+                float(line_obj.get("confidence", 0)) / 100.0
+                for line_obj in data["lines"]
+            ]
         else:
             lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
             line_confidences = [overall_conf] * len(lines)
@@ -160,4 +200,6 @@ class ClientOCRAdapter(BaseOCRAdapter):
         )
 
     def parse_bytes(self, data: bytes, content_type: str) -> OCRResult:
-        raise NotImplementedError("ClientOCRAdapter only accepts pre-parsed dict, not raw bytes")
+        raise NotImplementedError(
+            "ClientOCRAdapter only accepts pre-parsed dict, not raw bytes"
+        )

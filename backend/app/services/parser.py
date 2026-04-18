@@ -1,4 +1,5 @@
 """Receipt parser: regex pipeline + LLM fallback."""
+
 from __future__ import annotations
 
 import json
@@ -28,12 +29,8 @@ _DATE_PATTERNS = [
 ]
 
 _DUE_DATE_PATTERNS = [
-    (
-        r"(?:due\s*date|payment\s*due|bill\s*due)[:\s-]+(\d{4}[-/]\d{2}[-/]\d{2})"
-    ),
-    (
-        r"(?:due\s*date|payment\s*due|bill\s*due)[:\s-]+(\d{2}[-/]\d{2}[-/]\d{4})"
-    ),
+    (r"(?:due\s*date|payment\s*due|bill\s*due)[:\s-]+(\d{4}[-/]\d{2}[-/]\d{2})"),
+    (r"(?:due\s*date|payment\s*due|bill\s*due)[:\s-]+(\d{2}[-/]\d{2}[-/]\d{4})"),
     (
         r"(?:due\s*date|payment\s*due|bill\s*due)[:\s-]+("
         r"\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
@@ -63,9 +60,16 @@ _TAX_PATTERNS = [
 ]
 
 _CURRENCY_MAP = {
-    "$": "USD", "€": "EUR", "£": "GBP", "₹": "INR",
-    "CAD": "CAD", "AUD": "AUD", "USD": "USD", "EUR": "EUR",
-    "GBP": "GBP", "INR": "INR",
+    "$": "USD",
+    "€": "EUR",
+    "£": "GBP",
+    "₹": "INR",
+    "CAD": "CAD",
+    "AUD": "AUD",
+    "USD": "USD",
+    "EUR": "EUR",
+    "GBP": "GBP",
+    "INR": "INR",
 }
 
 _ITEM_LINE_PATTERN = re.compile(
@@ -86,7 +90,13 @@ _SKIP_LINES = re.compile(
 
 
 class ParsedItem:
-    def __init__(self, name: str, price: Optional[float], quantity: Optional[float], confidence: float):
+    def __init__(
+        self,
+        name: str,
+        price: Optional[float],
+        quantity: Optional[float],
+        confidence: float,
+    ):
         self.name = name
         self.price = price
         self.quantity = quantity
@@ -161,7 +171,9 @@ def _normalize_date(raw: str) -> Optional[str]:
     return None
 
 
-def _extract_date(lines: list[str], patterns: list[str] | None = None) -> tuple[Optional[str], float]:
+def _extract_date(
+    lines: list[str], patterns: list[str] | None = None
+) -> tuple[Optional[str], float]:
     search_patterns = patterns or _DATE_PATTERNS
     for line in lines:
         for pattern in search_patterns:
@@ -177,7 +189,9 @@ def _extract_date(lines: list[str], patterns: list[str] | None = None) -> tuple[
     return None, 0.0
 
 
-def _extract_amount(lines: list[str], patterns: list[str]) -> tuple[Optional[float], float]:
+def _extract_amount(
+    lines: list[str], patterns: list[str]
+) -> tuple[Optional[float], float]:
     is_tax_mode = any("tax" in p.lower() for p in patterns)
     is_total_mode = not is_tax_mode and any("total" in p.lower() for p in patterns)
 
@@ -226,7 +240,9 @@ def _extract_currency(lines: list[str]) -> str:
 
 def _extract_merchant(lines: list[str]) -> tuple[Optional[str], float]:
     # Merchant is usually in the first 3 non-empty lines
-    candidates = [line.strip() for line in lines[:5] if line.strip() and len(line.strip()) > 2]
+    candidates = [
+        line.strip() for line in lines[:5] if line.strip() and len(line.strip()) > 2
+    ]
     if candidates:
         # Prefer lines that look like business names (title case, no numbers)
         for c in candidates:
@@ -246,7 +262,9 @@ def _extract_items(lines: list[str]) -> list[ParsedItem]:
             name = m.group("name").strip()
             try:
                 price = float(m.group("price").replace("$", ""))
-                items.append(ParsedItem(name=name, price=price, quantity=1.0, confidence=0.85))
+                items.append(
+                    ParsedItem(name=name, price=price, quantity=1.0, confidence=0.85)
+                )
             except ValueError:
                 pass
     return items
@@ -274,13 +292,22 @@ def _extract_account_suffix(lines: list[str]) -> tuple[Optional[str], float]:
 def _is_recurring(lines: list[str]) -> bool:
     full_text = " ".join(lines).lower()
     recurring_markers = [
-        "monthly", "quarterly", "annual", "yearly", "subscription",
-        "autopay", "auto pay", "recurring", "next billing date",
+        "monthly",
+        "quarterly",
+        "annual",
+        "yearly",
+        "subscription",
+        "autopay",
+        "auto pay",
+        "recurring",
+        "next billing date",
     ]
     return any(marker in full_text for marker in recurring_markers)
 
 
-def _suggest_category(merchant: Optional[str], items: list[ParsedItem]) -> Optional[str]:
+def _suggest_category(
+    merchant: Optional[str], items: list[ParsedItem]
+) -> Optional[str]:
     merchant_lower = (merchant or "").lower()
     mapping = {
         "electric": "Utilities",
@@ -313,29 +340,30 @@ def _suggest_category(merchant: Optional[str], items: list[ParsedItem]) -> Optio
 
 
 async def _llm_fallback(ocr_text: str) -> Optional[dict]:
-    """Call LLM for ambiguous receipts."""
+    """Call LLM for ambiguous receipts. Returns None if no key pool or on failure."""
     try:
-        from openai import AsyncOpenAI
-
-        from app.config import get_settings
+        from app.services.llm_client import llm_chat_completion, llm_pool
         from app.services.prompts import PARSER_FALLBACK_PROMPT
 
-        settings = get_settings()
-        if not settings.LLM_PROVIDER_KEY:
+        if not llm_pool():
             return None
 
-        client = AsyncOpenAI(api_key=settings.LLM_PROVIDER_KEY, base_url=settings.LLM_PROVIDER_BASE_URL)
-        response = await client.chat.completions.create(
-            model=settings.LLM_PROVIDER_MODEL,
-            messages=[{"role": "user", "content": PARSER_FALLBACK_PROMPT.format(ocr_text=ocr_text)}],
+        response = await llm_chat_completion(
+            messages=[
+                {
+                    "role": "user",
+                    "content": PARSER_FALLBACK_PROMPT.format(ocr_text=ocr_text),
+                }
+            ],
             response_format={"type": "json_object"},
             max_tokens=800,
             temperature=0.1,
+            op_name="parser.fallback",
         )
         content = response.choices[0].message.content or "{}"
         return json.loads(content)
     except Exception as e:
-        logger.warning(f"LLM fallback failed: {e}")
+        logger.warning("parser.llm_fallback_failed", extra={"err": repr(e)[:200]})
         return None
 
 
@@ -350,12 +378,18 @@ def parse_receipt(lines: list[str], ocr_confidence: float = 0.8) -> "ParsedRecei
 
     result.merchant, result.field_confidence["merchant"] = _extract_merchant(lines)
     result.date, result.field_confidence["date"] = _extract_date(lines)
-    result.due_date, result.field_confidence["due_date"] = _extract_date(lines, _DUE_DATE_PATTERNS)
-    result.total, result.field_confidence["total"] = _extract_amount(lines, _TOTAL_PATTERNS)
+    result.due_date, result.field_confidence["due_date"] = _extract_date(
+        lines, _DUE_DATE_PATTERNS
+    )
+    result.total, result.field_confidence["total"] = _extract_amount(
+        lines, _TOTAL_PATTERNS
+    )
     result.tax, result.field_confidence["tax"] = _extract_amount(lines, _TAX_PATTERNS)
     result.currency = _extract_currency(lines)
     result.items = _extract_items(lines)
-    result.account_suffix, result.field_confidence["account_suffix"] = _extract_account_suffix(lines)
+    result.account_suffix, result.field_confidence["account_suffix"] = (
+        _extract_account_suffix(lines)
+    )
     result.recurring_indicator = _is_recurring(lines)
     result.category_suggestion = _suggest_category(result.merchant, result.items)
 
@@ -366,7 +400,9 @@ def parse_receipt(lines: list[str], ocr_confidence: float = 0.8) -> "ParsedRecei
     return result
 
 
-async def parse_receipt_with_llm_fallback(lines: list[str], ocr_confidence: float = 0.8) -> "ParsedReceipt":
+async def parse_receipt_with_llm_fallback(
+    lines: list[str], ocr_confidence: float = 0.8
+) -> "ParsedReceipt":
     """Full pipeline including async LLM fallback for low-confidence fields."""
     result = parse_receipt(lines, ocr_confidence)
 
@@ -379,16 +415,24 @@ async def parse_receipt_with_llm_fallback(lines: list[str], ocr_confidence: floa
             result.parser_provider = "regex+llm"
             if not result.merchant and llm_data.get("merchant"):
                 result.merchant = llm_data["merchant"]
-                result.field_confidence["merchant"] = max(result.field_confidence.get("merchant", 0), 0.7)
+                result.field_confidence["merchant"] = max(
+                    result.field_confidence.get("merchant", 0), 0.7
+                )
             if not result.date and llm_data.get("date"):
                 result.date = llm_data["date"]
-                result.field_confidence["date"] = max(result.field_confidence.get("date", 0), 0.7)
+                result.field_confidence["date"] = max(
+                    result.field_confidence.get("date", 0), 0.7
+                )
             if not result.due_date and llm_data.get("due_date"):
                 result.due_date = llm_data["due_date"]
-                result.field_confidence["due_date"] = max(result.field_confidence.get("due_date", 0), 0.7)
+                result.field_confidence["due_date"] = max(
+                    result.field_confidence.get("due_date", 0), 0.7
+                )
             if not result.total and llm_data.get("total"):
                 result.total = llm_data["total"]
-                result.field_confidence["total"] = max(result.field_confidence.get("total", 0), 0.7)
+                result.field_confidence["total"] = max(
+                    result.field_confidence.get("total", 0), 0.7
+                )
             if not result.tax and llm_data.get("tax"):
                 result.tax = llm_data["tax"]
             if llm_data.get("currency"):

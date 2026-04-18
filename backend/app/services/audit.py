@@ -1,4 +1,5 @@
 """Audit logging helpers for sensitive or compliance-relevant actions."""
+
 from __future__ import annotations
 
 from typing import Any, Optional
@@ -8,7 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AuditLog
 
-SENSITIVE_KEYS = {"password", "token", "access_token", "refresh_token", "cvv", "pan", "card_number"}
+SENSITIVE_KEYS = {
+    "password",
+    "token",
+    "access_token",
+    "refresh_token",
+    "cvv",
+    "pan",
+    "card_number",
+}
 
 
 def _sanitize_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
@@ -29,11 +38,10 @@ def _sanitize_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _extract_ip(request: Request | None) -> str | None:
+    """Extract client IP. Uses direct connection IP for reliability
+    since X-Forwarded-For can be spoofed without trusted proxy config."""
     if request is None:
         return None
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
     return request.client.host if request.client else None
 
 

@@ -1,10 +1,23 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { useForm, useFieldArray } from 'react-hook-form';
-import { Check, AlertTriangle, Plus, Trash2, ArrowRight, ShieldAlert, Sparkles, Link2 } from 'lucide-react';
-import { api } from '../services/api';
-import type { ParsedReceipt, Receipt } from '../types';
-import clsx from 'clsx';
+import React, { useEffect, useMemo, useState } from "react";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
+import { useForm, useFieldArray } from "react-hook-form";
+import {
+  AlertTriangle,
+  Plus,
+  Trash2,
+  ArrowRight,
+  ShieldAlert,
+  Sparkles,
+  Link2,
+} from "lucide-react";
+import { api } from "../services/api";
+import type { ParsedReceipt, Receipt } from "../types";
+import clsx from "clsx";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const ConfidenceBadge = ({ conf }: { conf?: number }) => {
   if (conf === undefined || conf > 0.8) return null;
@@ -12,10 +25,10 @@ const ConfidenceBadge = ({ conf }: { conf?: number }) => {
   return (
     <div
       className={clsx(
-        'absolute right-2.5 top-2.5 flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium',
+        "absolute right-3 top-3.5 flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider",
         isLow
-          ? 'bg-danger/10 text-danger border border-danger/20'
-          : 'bg-warning/10 text-warning border border-warning/20'
+          ? "bg-destructive text-destructive-foreground shadow-sm"
+          : "bg-warning text-warning-foreground shadow-sm",
       )}
     >
       <AlertTriangle size={10} />
@@ -25,16 +38,16 @@ const ConfidenceBadge = ({ conf }: { conf?: number }) => {
 };
 
 const EMPTY_RECEIPT: ParsedReceipt = {
-  merchant: '',
-  date: '',
-  due_date: '',
+  merchant: "",
+  date: "",
+  due_date: "",
   total: 0,
   tax: 0,
-  currency: 'INR',
-  category_suggestion: '',
+  currency: "INR",
+  category_suggestion: "",
   recurring_indicator: false,
-  account_suffix: '',
-  parser_provider: '',
+  account_suffix: "",
+  parser_provider: "",
   items: [],
   field_confidence: {},
 };
@@ -45,37 +58,46 @@ export const Review: React.FC = () => {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(!location.state?.parsed);
-  const [error, setError] = useState('');
-  const [ocrConfidence, setOcrConfidence] = useState<number>(location.state?.confidence || 0);
-  const [duplicateOfReceiptId, setDuplicateOfReceiptId] = useState<string | null>(location.state?.duplicate_of_receipt_id || null);
-  const [duplicateConfidence, setDuplicateConfidence] = useState<number | null>(location.state?.duplicate_confidence || null);
+  const [error, setError] = useState("");
+  const [ocrConfidence, setOcrConfidence] = useState<number>(
+    location.state?.confidence || 0,
+  );
+  const [duplicateOfReceiptId, setDuplicateOfReceiptId] = useState<
+    string | null
+  >(location.state?.duplicate_of_receipt_id || null);
+  const [duplicateConfidence, setDuplicateConfidence] = useState<number | null>(
+    location.state?.duplicate_confidence || null,
+  );
 
-  const initialParsed: ParsedReceipt = useMemo(() => location.state?.parsed || EMPTY_RECEIPT, [location.state]);
+  const initialParsed: ParsedReceipt = useMemo(
+    () => location.state?.parsed || EMPTY_RECEIPT,
+    [location.state],
+  );
 
   const { register, control, handleSubmit, reset } = useForm<ParsedReceipt>({
     defaultValues: initialParsed,
   });
 
-  const { fields, append, remove } = useFieldArray({ control, name: 'items' });
+  const { fields, append, remove } = useFieldArray({ control, name: "items" });
 
   useEffect(() => {
     const loadReceipt = async () => {
       if (location.state?.parsed || !id) return;
       setLoading(true);
-      setError('');
+      setError("");
       try {
         const { data } = await api.get<Receipt>(`/receipts/${id}`);
         const parsedFromReceipt: ParsedReceipt = {
-          merchant: data.merchant || '',
-          date: data.date || '',
-          due_date: data.due_date || '',
+          merchant: data.merchant || "",
+          date: data.date || "",
+          due_date: data.due_date || "",
           total: data.total || 0,
           tax: data.tax || 0,
-          currency: data.currency || 'INR',
-          category_suggestion: data.category_suggestion || '',
+          currency: data.currency || "INR",
+          category_suggestion: data.category_suggestion || "",
           recurring_indicator: data.recurring_indicator || false,
-          account_suffix: data.account_suffix || '',
-          parser_provider: data.parser_provider || '',
+          account_suffix: data.account_suffix || "",
+          parser_provider: data.parser_provider || "",
           items: data.items || [],
           field_confidence: {},
         };
@@ -84,7 +106,9 @@ export const Review: React.FC = () => {
         setDuplicateOfReceiptId(data.duplicate_of_receipt_id || null);
         setDuplicateConfidence(data.duplicate_confidence || null);
       } catch (err: any) {
-        setError(err?.response?.data?.detail || 'Unable to load receipt details.');
+        setError(
+          err?.response?.data?.detail || "Unable to load receipt details.",
+        );
       } finally {
         setLoading(false);
       }
@@ -96,188 +120,360 @@ export const Review: React.FC = () => {
   const onSubmit = async (data: ParsedReceipt) => {
     if (!id) return;
     setSubmitting(true);
-    setError('');
+    setError("");
     try {
-      await api.post('/confirm', { receipt_id: id, edits: data });
-      navigate('/transactions');
+      await api.post("/confirm", { receipt_id: id, edits: data });
+      navigate("/transactions");
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.response?.data?.message || 'Failed to confirm receipt');
+      setError(
+        err.response?.data?.detail ||
+          err.response?.data?.message ||
+          "Failed to confirm receipt",
+      );
       setSubmitting(false);
     }
   };
 
-  const getConfColor = (conf: number) => {
-    if (conf >= 0.8) return '#34d399';
-    if (conf >= 0.6) return '#fbbf24';
-    return '#fb7185';
+  const getConfClassName = (conf: number) => {
+    if (conf >= 0.8) return "bg-success/10 text-success border-success/20";
+    if (conf >= 0.6) return "bg-warning/10 text-warning border-warning/20";
+    return "bg-destructive/10 text-destructive border-destructive/20";
   };
 
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto animate-fade-in space-y-4">
-        <div className="skeleton h-10 rounded-xl" />
-        <div className="skeleton h-64 rounded-xl" />
+      <div className="max-w-3xl mx-auto animate-fade-in space-y-6">
+        <Skeleton className="h-10 w-48 rounded-md" />
+        <Skeleton className="h-[500px] w-full rounded-2xl border border-border/40" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto animate-fade-in space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-4">
+    <div className="max-w-3xl mx-auto animate-fade-in space-y-6 pb-12">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Review Receipt</h1>
-          <p className="text-sm mt-0.5 text-muted">Confirm or edit extracted fields before saving.</p>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">
+            Review Receipt
+          </h1>
+          <p className="text-sm mt-0.5 font-medium text-muted-foreground">
+            Confirm or edit extracted fields before final saving.
+          </p>
         </div>
         {ocrConfidence > 0 && (
           <div
-            className="flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm"
-            style={{
-              background: `rgba(${ocrConfidence >= 0.8 ? '16,185,129' : ocrConfidence >= 0.6 ? '245,158,11' : '244,63,94'},0.1)`,
-              border: `1px solid rgba(${ocrConfidence >= 0.8 ? '16,185,129' : ocrConfidence >= 0.6 ? '245,158,11' : '244,63,94'},0.2)`,
-            }}
+            className={clsx(
+              "flex items-center gap-2.5 px-4 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider border shadow-sm",
+              getConfClassName(ocrConfidence),
+            )}
           >
-            <Sparkles size={14} style={{ color: getConfColor(ocrConfidence) }} />
-            <span style={{ color: getConfColor(ocrConfidence) }}>
-              Extraction confidence: <strong>{Math.round(ocrConfidence * 100)}%</strong>
+            <Sparkles size={14} />
+            <span>
+              Extraction confidence:{" "}
+              <strong className="text-[13px] ml-0.5">
+                {Math.round(ocrConfidence * 100)}%
+              </strong>
             </span>
           </div>
         )}
       </div>
 
       {error && (
-        <div className="flex items-start gap-3 p-4 rounded-xl text-sm animate-slide-up" style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)', color: '#fb7185' }}>
-          <ShieldAlert size={16} className="flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 p-4 rounded-xl text-sm font-semibold shadow-sm animate-slide-up bg-destructive/10 border border-destructive/20 text-destructive">
+          <ShieldAlert size={18} className="flex-shrink-0" />
           {error}
         </div>
       )}
 
       {duplicateOfReceiptId && (
-        <div className="flex items-start gap-3 p-4 rounded-xl text-sm" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.22)', color: '#fbbf24' }}>
-          <Link2 size={15} className="flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-4 p-5 rounded-2xl bg-warning/10 border border-warning/20 text-warning shadow-sm">
+          <div className="w-10 h-10 rounded-full bg-background flex items-center justify-center border border-warning/30 flex-shrink-0">
+            <Link2 size={18} className="text-warning" />
+          </div>
           <div>
-            <p>Possible duplicate detected for receipt <strong>{duplicateOfReceiptId}</strong>.</p>
-            {typeof duplicateConfidence === 'number' && <p className="text-xs mt-1">Confidence: {Math.round(duplicateConfidence * 100)}%</p>}
+            <p className="font-bold text-foreground">
+              Possible duplicate detected
+            </p>
+            <p className="text-sm text-foreground/80 font-medium mt-0.5 leading-relaxed">
+              This resembles an existing receipt{" "}
+              <strong>{duplicateOfReceiptId}</strong>.
+            </p>
+            {typeof duplicateConfidence === "number" && (
+              <p className="text-[11px] uppercase tracking-wider font-bold mt-2 pt-2 border-t border-warning/20 w-fit">
+                Similarity Match: {Math.round(duplicateConfidence * 100)}%
+              </p>
+            )}
           </div>
         </div>
       )}
 
       {ocrConfidence > 0 && ocrConfidence < 0.6 && (
-        <div className="flex items-start gap-3 p-4 rounded-xl text-sm" style={{ background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.18)', color: '#fbbf24' }}>
-          <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
-          Low confidence extraction. Please review all fields carefully before confirming.
+        <div className="flex items-start gap-4 p-5 rounded-2xl bg-destructive/5 border border-destructive/20 text-destructive shadow-sm">
+          <AlertTriangle size={20} className="flex-shrink-0 text-destructive" />
+          <p className="text-sm font-medium leading-relaxed">
+            Low confidence extraction. The document quality might be poor.
+            Please review all fields carefully before confirming.
+          </p>
         </div>
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div className="glass-panel p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-5">Receipt details</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="relative">
-              <label className="label-text">Merchant Name</label>
-              <input {...register('merchant')} className="input-field" placeholder="Store or merchant" />
-              <ConfidenceBadge conf={initialParsed.field_confidence?.merchant} />
-            </div>
-            <div className="relative">
-              <label className="label-text">Date</label>
-              <input type="date" {...register('date')} className="input-field" />
-              <ConfidenceBadge conf={initialParsed.field_confidence?.date} />
-            </div>
-            <div>
-              <label className="label-text">Due Date</label>
-              <input type="date" {...register('due_date')} className="input-field" />
-            </div>
-            <div>
-              <label className="label-text">Category Suggestion</label>
-              <input {...register('category_suggestion')} className="input-field" placeholder="e.g. Utilities" />
-            </div>
-            <div className="relative">
-              <label className="label-text">Total Amount</label>
-              <input type="number" step="0.01" {...register('total', { valueAsNumber: true })} className="input-field" placeholder="0.00" />
-              <ConfidenceBadge conf={initialParsed.field_confidence?.total} />
-            </div>
-            <div className="relative">
-              <label className="label-text">Tax</label>
-              <input type="number" step="0.01" {...register('tax', { valueAsNumber: true })} className="input-field" placeholder="0.00" />
-              <ConfidenceBadge conf={initialParsed.field_confidence?.tax} />
-            </div>
-            <div>
-              <label className="label-text">Currency</label>
-              <select {...register('currency')} className="input-field">
-                {['INR', 'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'SGD'].map((currencyCode) => (
-                  <option key={currencyCode} value={currencyCode}>{currencyCode}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label-text">Account/Card Suffix</label>
-              <input {...register('account_suffix')} className="input-field" maxLength={4} placeholder="Last 4 digits" />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center gap-2 text-sm text-muted">
-            <input type="checkbox" {...register('recurring_indicator')} className="rounded" />
-            Mark as recurring bill
-          </div>
-        </div>
-
-        <div className="glass-panel p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-sm font-semibold text-foreground">Line items</h2>
-            <button
-              type="button"
-              onClick={() => append({ name: '', price: 0, quantity: 1, category: '' })}
-              className="flex items-center gap-1.5 text-xs font-medium transition-colors px-3 py-1.5 rounded-lg"
-              style={{ color: '#818cf8', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)' }}
-            >
-              <Plus size={13} /> Add Item
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {fields.length === 0 && (
-              <div className="text-center py-8 rounded-xl text-sm text-muted" style={{ border: '1px dashed rgba(255,255,255,0.08)' }}>
-                No line items extracted. Add items manually if needed.
+        <Card className="glass-card border-border/40 shadow-sm">
+          <CardContent className="p-6 sm:p-8">
+            <h2 className="text-base font-bold text-foreground mb-6 tracking-tight uppercase">
+              Base Receipt Details
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2 relative">
+                <Label className="text-sm font-semibold">Merchant Name</Label>
+                <Input
+                  className="glass-panel h-11"
+                  {...register("merchant")}
+                  placeholder="Store or merchant"
+                />
+                <ConfidenceBadge
+                  conf={initialParsed.field_confidence?.merchant}
+                />
               </div>
-            )}
-            {fields.map((field, index) => (
-              <div key={field.id} className="flex items-start gap-3 p-4 rounded-xl animate-fade-in" style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <div className="flex-1 space-y-3">
-                  <input {...register(`items.${index}.name`)} placeholder="Item name" className="input-field text-sm" />
-                  <div className="grid grid-cols-3 gap-3">
-                    <input type="number" step="0.01" {...register(`items.${index}.price`, { valueAsNumber: true })} placeholder="Price" className="input-field text-sm py-2" />
-                    <input type="number" step="0.01" {...register(`items.${index}.quantity`, { valueAsNumber: true })} placeholder="Qty" className="input-field text-sm py-2" />
-                    <input {...register(`items.${index}.category`)} placeholder="Category" className="input-field text-sm py-2" />
-                  </div>
+              <div className="space-y-2 relative">
+                <Label className="text-sm font-semibold">
+                  Transaction Date
+                </Label>
+                <Input
+                  className="glass-panel h-11"
+                  type="date"
+                  {...register("date")}
+                />
+                <ConfidenceBadge conf={initialParsed.field_confidence?.date} />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">
+                  Due Date{" "}
+                  <span className="opacity-60 text-xs font-normal">
+                    (if bill)
+                  </span>
+                </Label>
+                <Input
+                  className="glass-panel h-11"
+                  type="date"
+                  {...register("due_date")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">
+                  Category Suggestion
+                </Label>
+                <Input
+                  className="glass-panel h-11"
+                  {...register("category_suggestion")}
+                  placeholder="e.g. Utilities"
+                />
+              </div>
+              <div className="space-y-2 relative">
+                <Label className="text-sm font-semibold">Total Amount</Label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-[11px] text-muted-foreground font-bold font-mono">
+                    ₹
+                  </span>
+                  <Input
+                    className="glass-panel h-11 pl-8 font-mono text-lg tracking-wider"
+                    type="number"
+                    step="0.01"
+                    {...register("total", { valueAsNumber: true })}
+                    placeholder="0.00"
+                  />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => remove(index)}
-                  className="p-2 rounded-lg transition-all duration-200 mt-0.5 flex-shrink-0 text-muted hover:text-danger hover:bg-danger/10"
-                >
-                  <Trash2 size={15} />
-                </button>
+                <ConfidenceBadge conf={initialParsed.field_confidence?.total} />
               </div>
-            ))}
-          </div>
-        </div>
+              <div className="space-y-2 relative">
+                <Label className="text-sm font-semibold">Tax Amount</Label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-[11px] text-muted-foreground font-bold font-mono">
+                    ₹
+                  </span>
+                  <Input
+                    className="glass-panel h-11 pl-8 font-mono text-lg tracking-wider"
+                    type="number"
+                    step="0.01"
+                    {...register("tax", { valueAsNumber: true })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <ConfidenceBadge conf={initialParsed.field_confidence?.tax} />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Currency</Label>
+                <select
+                  {...register("currency")}
+                  className="flex h-11 w-full items-center justify-between rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 font-bold tracking-wider"
+                >
+                  {["INR", "USD", "EUR", "GBP", "CAD", "AUD", "JPY", "SGD"].map(
+                    (currencyCode) => (
+                      <option
+                        key={currencyCode}
+                        value={currencyCode}
+                        className="bg-background text-foreground"
+                      >
+                        {currencyCode}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">
+                  Account / Card Suffix
+                </Label>
+                <Input
+                  className="glass-panel h-11 font-mono tracking-widest text-base placeholder:tracking-normal placeholder:font-sans"
+                  {...register("account_suffix")}
+                  maxLength={4}
+                  placeholder="Last 4"
+                />
+              </div>
+            </div>
+            <div className="mt-8 p-4 rounded-xl bg-primary/5 border border-primary/20 flex items-center gap-3 text-sm text-foreground font-bold cursor-pointer transition-colors hover:bg-primary/10">
+              <input
+                type="checkbox"
+                id="recurring-check"
+                {...register("recurring_indicator")}
+                className="w-5 h-5 rounded border-primary/40 text-primary shadow-sm focus:ring-primary bg-background"
+              />
+              <label
+                htmlFor="recurring-check"
+                className="cursor-pointer select-none"
+              >
+                Mark as recurring monthly bill
+              </label>
+            </div>
+          </CardContent>
+        </Card>
 
-        <div className="flex justify-end">
-          <button type="submit" id="review-confirm-btn" disabled={submitting} className="btn-primary flex items-center gap-2 px-8 py-3">
+        <Card className="glass-card border-border/40 shadow-sm">
+          <CardContent className="p-6 sm:p-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+              <h2 className="text-base font-bold text-foreground uppercase tracking-tight">
+                Extracted Line Items
+              </h2>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  append({ name: "", price: 0, quantity: 1, category: "" })
+                }
+                className="gap-2 font-bold shadow-sm"
+              >
+                <Plus size={14} /> Add Item Row
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {fields.length === 0 && (
+                <div className="text-center py-12 rounded-2xl text-sm border border-dashed border-border/60 bg-muted/10 text-muted-foreground">
+                  No line items could be extracted automatically.
+                  <br />
+                  Add items manually if needed for detailed tracking.
+                </div>
+              )}
+              {fields.map((field, index) => (
+                <div
+                  key={field.id}
+                  className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-5 rounded-2xl animate-fade-in bg-card border border-border/40 shadow-sm hover:border-primary/20 transition-all group"
+                >
+                  <div className="flex-1 space-y-4 w-full">
+                    <Input
+                      className="glass-panel h-11 font-medium"
+                      {...register(`items.${index}.name`)}
+                      placeholder="Item internal identifier"
+                    />
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="relative">
+                        <span className="absolute left-3 top-3 text-xs text-muted-foreground font-bold uppercase">
+                          Price
+                        </span>
+                        <Input
+                          className="glass-panel h-11 pl-12 font-mono tracking-wider"
+                          type="number"
+                          step="0.01"
+                          {...register(`items.${index}.price`, {
+                            valueAsNumber: true,
+                          })}
+                        />
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-3 top-3 text-xs text-muted-foreground font-bold uppercase">
+                          Qty
+                        </span>
+                        <Input
+                          className="glass-panel h-11 pl-10 font-mono tracking-wider text-center"
+                          type="number"
+                          step="0.01"
+                          {...register(`items.${index}.quantity`, {
+                            valueAsNumber: true,
+                          })}
+                        />
+                      </div>
+                      <Input
+                        className="glass-panel h-11 font-medium"
+                        {...register(`items.${index}.category`)}
+                        placeholder="Cat."
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => remove(index)}
+                    className="h-10 w-10 text-muted-foreground hover:text-destructive hover:bg-destructive/10 self-end sm:self-auto border border-transparent shadow-[0_0_0_0_rgba(0,0,0,0)]"
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-end pt-4 pb-8">
+          <Button
+            type="submit"
+            id="review-confirm-btn"
+            disabled={submitting}
+            className="w-full sm:w-auto min-w-[220px] h-12 gap-2 text-base font-bold shadow-lg"
+            size="lg"
+          >
             {submitting ? (
               <>
-                <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                <svg
+                  className="animate-spin w-5 h-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
                 </svg>
-                Saving...
+                Saving securely...
               </>
             ) : (
               <>
-                <Check size={16} />
-                Confirm and save
-                <ArrowRight size={16} />
+                Confirm Extracted Metadata
+                <ArrowRight size={18} />
               </>
             )}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

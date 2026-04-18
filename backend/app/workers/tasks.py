@@ -1,4 +1,5 @@
 """RQ background task definitions."""
+
 from __future__ import annotations
 
 import logging
@@ -30,7 +31,9 @@ def run_ocr_and_parse(receipt_id: str, file_path: str, content_type: str) -> Non
 
             adapter = ServerOCRAdapter()
             ocr_result = adapter.parse_bytes(raw, content_type)
-            parsed = await parse_receipt_with_llm_fallback(ocr_result.lines, ocr_result.confidence)
+            parsed = await parse_receipt_with_llm_fallback(
+                ocr_result.lines, ocr_result.confidence
+            )
 
             receipt.merchant = parsed.merchant
             receipt.date = parsed.date
@@ -64,8 +67,8 @@ def run_coach_suggestions(user_id: str) -> None:
     asyncio.run(_run())
 
 
-def enqueue_ocr_job(receipt_id: str, file_path: str, content_type: str) -> None:
-    """Enqueue OCR job to Redis queue. Falls back to sync execution if Redis unavailable."""
+def enqueue_coach_job(user_id: str) -> None:
+    """Enqueue coach regeneration; falls back to sync if Redis unavailable."""
     try:
         from redis import Redis
         from rq import Queue
@@ -75,7 +78,27 @@ def enqueue_ocr_job(receipt_id: str, file_path: str, content_type: str) -> None:
         settings = get_settings()
         redis_conn = Redis.from_url(settings.REDIS_URL)
         q = Queue(connection=redis_conn)
-        q.enqueue(run_ocr_and_parse, receipt_id, file_path, content_type, job_timeout=120)
+        q.enqueue(run_coach_suggestions, user_id, job_timeout=120)
+        logger.info(f"Coach job enqueued for user {user_id}")
+    except Exception as e:
+        logger.warning(f"Could not enqueue coach job (running sync): {e}")
+        run_coach_suggestions(user_id)
+
+
+def enqueue_ocr_job(receipt_id: str, file_path: str, content_type: str) -> None:
+    """Enqueue OCR job; falls back to sync if Redis unavailable."""
+    try:
+        from redis import Redis
+        from rq import Queue
+
+        from app.config import get_settings
+
+        settings = get_settings()
+        redis_conn = Redis.from_url(settings.REDIS_URL)
+        q = Queue(connection=redis_conn)
+        q.enqueue(
+            run_ocr_and_parse, receipt_id, file_path, content_type, job_timeout=120
+        )
         logger.info(f"OCR job enqueued for receipt {receipt_id}")
     except Exception as e:
         logger.warning(f"Could not enqueue OCR job (running sync): {e}")

@@ -32,10 +32,20 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(private val api: FinloApi) : ViewModel() {
     private val _user = MutableStateFlow<UserDto?>(null)
     val user = _user.asStateFlow()
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage = _errorMessage.asStateFlow()
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
 
     init {
         viewModelScope.launch {
-            try { _user.value = api.getMe() } catch (_: Exception) {}
+            try {
+                _user.value = api.getMe()
+            } catch (_: Exception) {
+                _errorMessage.value = "Failed to load profile. Check your connection and try again."
+            }
         }
     }
 }
@@ -48,6 +58,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val user by viewModel.user.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     Column(
         modifier = Modifier
@@ -57,6 +68,18 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text("Settings", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Foreground)
+
+        errorMessage?.let { msg ->
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(msg, color = DangerLight, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { viewModel.clearError() }) { Text("Dismiss", fontSize = 12.sp) }
+            }
+        }
 
         // Profile card
         Row(

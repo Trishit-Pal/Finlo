@@ -1,7 +1,12 @@
 [tool.ruff]
 line-length = 120
+
+[tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "app/tests/*" = ["S101", "E402"]
 "app/db/models.py" = ["E501"]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 120

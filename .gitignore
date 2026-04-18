@@ -64,6 +64,9 @@ logs/
 
 # SQLite databases
 *.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
 
 # Lint/build artifacts
 eslint_report.json

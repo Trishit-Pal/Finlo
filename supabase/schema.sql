@@ -99,6 +99,11 @@ create table if not exists transactions (
     source text default 'manual',
     receipt_id text references receipts(id) on delete set null,
     notes text,
+    type text default 'expense',
+    account_id text,
+    transfer_to_account_id text,
+    import_batch_id text,
+    dedup_hash text,
     created_at timestamptz default now()
 );
 
@@ -218,6 +223,7 @@ create index if not exists ix_feedback_user on feedback(user_id);
 create table if not exists otp_tokens (
     id text primary key default gen_random_uuid()::text,
     mobile_number text not null,
+    mobile_number_hash text,
     otp_hash text not null,
     expires_at timestamptz not null,
     used boolean default false,
@@ -225,6 +231,7 @@ create table if not exists otp_tokens (
 );
 
 create index if not exists ix_otp_mobile on otp_tokens(mobile_number);
+create index if not exists ix_otp_mobile_hash on otp_tokens(mobile_number_hash);
 
 -- ── Embeddings ──────────────────────────────────────────────────────────────
 create table if not exists embeddings (
@@ -285,3 +292,88 @@ create table if not exists audit_logs (
 
 create index if not exists ix_audit_logs_user on audit_logs(user_id);
 create index if not exists ix_audit_logs_action_created on audit_logs(action, created_at);
+
+-- ── Additional FK Indexes (PERF-01) ─────────────────────────────────────────
+create index if not exists ix_bills_category_id on bills(category_id);
+create index if not exists ix_budgets_category_id on budgets(category_id);
+create index if not exists ix_transactions_category_id on transactions(category_id);
+create index if not exists ix_receipts_duplicate_of on receipts(duplicate_of_receipt_id);
+create index if not exists ix_budget_versions_user_id on budget_versions(user_id);
+
+-- ── Accounts ─────────────────────────────────────────────────────────────────
+create table if not exists accounts (
+    id text primary key default gen_random_uuid()::text,
+    user_id text not null references users(id) on delete cascade,
+    name text not null,
+    type text not null,
+    institution_label text,
+    last4 text,
+    opening_balance double precision default 0.0,
+    current_balance double precision default 0.0,
+    currency text default 'INR',
+    is_active boolean default true,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+create unique index if not exists ix_accounts_user_name on accounts(user_id, name);
+
+-- ── Balance Snapshots ────────────────────────────────────────────────────────
+create table if not exists balance_snapshots (
+    id text primary key default gen_random_uuid()::text,
+    account_id text not null references accounts(id) on delete cascade,
+    user_id text not null references users(id) on delete cascade,
+    date text not null,
+    balance double precision not null,
+    notes text,
+    created_at timestamptz default now()
+);
+
+create index if not exists ix_balance_snapshots_account_date on balance_snapshots(account_id, date);
+
+-- ── Import Batches ───────────────────────────────────────────────────────────
+create table if not exists import_batches (
+    id text primary key default gen_random_uuid()::text,
+    user_id text not null references users(id) on delete cascade,
+    source_type text not null,
+    file_name text,
+    row_count integer default 0,
+    success_count integer default 0,
+    error_count integer default 0,
+    column_mapping jsonb default '{}',
+    errors_detail jsonb default '[]',
+    status text default 'completed',
+    created_at timestamptz default now()
+);
+
+-- ── Recurring Rules ──────────────────────────────────────────────────────────
+create table if not exists recurring_rules (
+    id text primary key default gen_random_uuid()::text,
+    user_id text not null references users(id) on delete cascade,
+    label text not null,
+    type text default 'expense',
+    frequency text default 'monthly',
+    expected_amount double precision not null,
+    next_due_date text,
+    category text,
+    account_id text references accounts(id) on delete set null,
+    is_active boolean default true,
+    created_at timestamptz default now()
+);
+
+-- ── Insights ─────────────────────────────────────────────────────────────────
+create table if not exists insights (
+    id text primary key default gen_random_uuid()::text,
+    user_id text not null references users(id) on delete cascade,
+    type text not null,
+    severity text not null,
+    title text not null,
+    explanation text not null,
+    recommendation text,
+    metric_basis jsonb default '{}',
+    is_dismissed boolean default false,
+    created_at timestamptz default now()
+);
+
+create index if not exists ix_insights_user_type on insights(user_id, type);
+

@@ -1,12 +1,14 @@
 """Bills & Reminders API: recurring bills with due dates, paid status, auto-expense."""
+
+from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.exceptions import ResourceNotFound
-from app.db.models import Bill, Transaction
+from app.db.models import Bill, Category, Transaction
 from app.dependencies import DB, CurrentUser
 
 VALID_FREQUENCIES = {"once", "weekly", "monthly", "quarterly", "yearly"}
@@ -30,22 +32,33 @@ class BillCreate(BaseModel):
     @classmethod
     def valid_frequency(cls, v: str) -> str:
         if v not in VALID_FREQUENCIES:
-            raise ValueError(f"frequency must be one of: {', '.join(VALID_FREQUENCIES)}")
+            raise ValueError(
+                f"frequency must be one of: {', '.join(VALID_FREQUENCIES)}"
+            )
         return v
 
 
 class BillUpdate(BaseModel):
-    name: Optional[str] = None
-    amount: Optional[float] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    amount: Optional[float] = Field(None, ge=0, le=100_000_000)
     is_variable: Optional[bool] = None
-    due_date: Optional[str] = None
+    due_date: Optional[str] = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     frequency: Optional[str] = None
-    category: Optional[str] = None
-    category_id: Optional[str] = None
-    reminder_lead_days: Optional[int] = None
+    category: Optional[str] = Field(None, max_length=128)
+    category_id: Optional[str] = Field(None, min_length=36, max_length=36)
+    reminder_lead_days: Optional[int] = Field(None, ge=0, le=30)
     is_paid: Optional[bool] = None
     auto_create_expense: Optional[bool] = None
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("frequency")
+    @classmethod
+    def valid_frequency(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in VALID_FREQUENCIES:
+            raise ValueError(
+                f"frequency must be one of: {', '.join(VALID_FREQUENCIES)}"
+            )
+        return v
 
 
 class BillOut(BaseModel):
@@ -61,14 +74,31 @@ class BillOut(BaseModel):
     is_paid: bool
     auto_create_expense: bool
     description: Optional[str]
-    created_at: str
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
 
+async def _verify_category_ownership(
+    db: DB, category_id: Optional[str], user_id: str
+) -> None:
+    """Ensure the category_id belongs to the current user."""
+    if not category_id:
+        return
+    result = await db.execute(
+        select(Category).where(Category.id == category_id, Category.user_id == user_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Category not found or does not belong to you",
+        )
+
+
 @router.post("", response_model=BillOut, status_code=status.HTTP_201_CREATED)
 async def create_bill(body: BillCreate, current_user: CurrentUser, db: DB) -> BillOut:
+    await _verify_category_ownership(db, body.category_id, current_user.id)
     bill = Bill(
         user_id=current_user.id,
         name=body.name,
@@ -87,18 +117,26 @@ async def create_bill(body: BillCreate, current_user: CurrentUser, db: DB) -> Bi
     return BillOut.model_validate(bill)
 
 
-@router.get("", response_model=list[BillOut])
+@router.get("")
 async def list_bills(
     current_user: CurrentUser,
     db: DB,
     paid: Optional[bool] = None,
-) -> list[BillOut]:
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> dict:
     q = select(Bill).where(Bill.user_id == current_user.id)
     if paid is not None:
         q = q.where(Bill.is_paid == paid)
-    q = q.order_by(Bill.due_date.asc())
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
+    q = q.order_by(Bill.due_date.asc()).limit(limit).offset(offset)
     result = await db.execute(q)
-    return [BillOut.model_validate(b) for b in result.scalars().all()]
+    return {
+        "items": [BillOut.model_validate(b) for b in result.scalars().all()],
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+    }
 
 
 @router.get("/{bill_id}", response_model=BillOut)
@@ -122,7 +160,12 @@ async def update_bill(
     bill = result.scalar_one_or_none()
     if not bill:
         raise ResourceNotFound("Bill")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    update_data = body.model_dump(exclude_unset=True)
+    if "category_id" in update_data:
+        await _verify_category_ownership(
+            db, update_data["category_id"], current_user.id
+        )
+    for field, value in update_data.items():
         setattr(bill, field, value)
     await db.flush()
     return BillOut.model_validate(bill)
@@ -138,20 +181,38 @@ async def mark_paid(bill_id: str, current_user: CurrentUser, db: DB) -> BillOut:
     if not bill:
         raise ResourceNotFound("Bill")
 
+    if bill.is_paid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Bill is already marked as paid",
+        )
+
     bill.is_paid = True
 
     if bill.auto_create_expense:
-        tx = Transaction(
-            user_id=current_user.id,
-            date=bill.due_date,
-            merchant=bill.name,
-            amount=bill.amount,
-            category=bill.category,
-            category_id=bill.category_id,
-            source="bill",
-            notes=f"Auto-created from bill: {bill.name}",
+        existing_txn = await db.execute(
+            select(Transaction)
+            .where(
+                Transaction.user_id == current_user.id,
+                Transaction.source == "bill",
+                Transaction.notes == f"Auto-created from bill: {bill.name}",
+                Transaction.date == bill.due_date,
+                Transaction.amount == bill.amount,
+            )
+            .limit(1)
         )
-        db.add(tx)
+        if not existing_txn.scalar_one_or_none():
+            tx = Transaction(
+                user_id=current_user.id,
+                date=bill.due_date,
+                merchant=bill.name,
+                amount=bill.amount,
+                category=bill.category,
+                category_id=bill.category_id,
+                source="bill",
+                notes=f"Auto-created from bill: {bill.name}",
+            )
+            db.add(tx)
 
     await db.flush()
     return BillOut.model_validate(bill)
@@ -186,6 +247,7 @@ async def delete_bill(bill_id: str, current_user: CurrentUser, db: DB) -> dict:
 async def upcoming_bills(current_user: CurrentUser, db: DB) -> list[BillOut]:
     """Return unpaid bills due within the next 7 days."""
     from datetime import date, timedelta
+
     today = date.today()
     end = today + timedelta(days=7)
     result = await db.execute(

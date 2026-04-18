@@ -13,9 +13,9 @@ export type User = {
 
 export type UserProfile = {
   username?: string | null;
-  username_source?: 'manual' | 'google' | 'migration' | 'admin' | null;
+  username_source?: "manual" | "google" | "migration" | "admin" | null;
   date_of_birth?: string | null;
-  date_of_birth_source?: 'manual' | 'google' | 'migration' | 'admin' | null;
+  date_of_birth_source?: "manual" | "google" | "migration" | "admin" | null;
   city?: string | null;
   address?: string | null;
   country?: string | null;
@@ -50,13 +50,49 @@ export type Category = {
   is_default: boolean;
 };
 
+// ── Accounts ────────────────────────────────────────────────────────────────
+
+export type AccountType = "bank" | "cash" | "wallet" | "credit_card" | "loan";
+
+export type Account = {
+  id: string;
+  name: string;
+  type: AccountType;
+  institution_label?: string | null;
+  last4?: string | null;
+  opening_balance: number;
+  current_balance: number;
+  currency: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type BalanceSnapshot = {
+  id: string;
+  account_id: string;
+  date: string;
+  balance: number;
+  notes?: string | null;
+  created_at: string;
+};
+
+export type NetWorth = {
+  total_assets: number;
+  total_liabilities: number;
+  net_worth: number;
+  accounts: Account[];
+};
+
 // ── Transactions / Expenses ─────────────────────────────────────────────────
+
+export type TransactionType = "income" | "expense" | "transfer";
 
 export type Transaction = {
   id: string;
   date: string;
   merchant: string;
   amount: number;
+  type: TransactionType;
   category?: string | null;
   category_id?: string | null;
   category_confidence?: number | null;
@@ -66,7 +102,71 @@ export type Transaction = {
   recurrence_frequency?: string | null;
   source: string;
   receipt_id?: string | null;
+  account_id?: string | null;
+  transfer_to_account_id?: string | null;
+  transfer_direction?: "debit" | "credit" | null;
+  import_batch_id?: string | null;
   notes?: string | null;
+};
+
+// ── Import Batches ──────────────────────────────────────────────────────────
+
+export type ImportBatch = {
+  id: string;
+  source_type: string;
+  file_name?: string | null;
+  row_count: number;
+  success_count: number;
+  error_count: number;
+  column_mapping?: Record<string, string>;
+  status: string;
+  created_at: string;
+};
+
+// ── Recurring Rules ─────────────────────────────────────────────────────────
+
+export type RecurringRule = {
+  id: string;
+  label: string;
+  type: "income" | "expense";
+  frequency: string;
+  expected_amount: number;
+  next_due_date?: string | null;
+  category?: string | null;
+  account_id?: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+// ── Insights ────────────────────────────────────────────────────────────────
+
+export type InsightSeverity = "info" | "warning" | "critical" | "positive";
+
+export type Insight = {
+  id: string;
+  type: string;
+  severity: InsightSeverity;
+  title: string;
+  explanation: string;
+  recommendation?: string | null;
+  metric_basis?: Record<string, any>;
+  is_dismissed: boolean;
+  created_at: string;
+};
+
+export type TrendPoint = {
+  month: string;
+  income: number;
+  expense: number;
+  net: number;
+};
+
+export type TrendData = {
+  months: TrendPoint[];
+  avg_daily_spend: number;
+  savings_rate?: number | null;
+  total_income: number;
+  total_expense: number;
 };
 
 // ── Receipts ────────────────────────────────────────────────────────────────
@@ -148,7 +248,7 @@ export type Budget = {
   hard_alert: number;
   spent: number;
   remaining: number;
-  alert_level: 'ok' | 'soft' | 'hard';
+  alert_level: "ok" | "soft" | "hard";
   edit_count: number;
   version: number;
   last_edited_at?: string | null;
@@ -160,7 +260,7 @@ export type Budget = {
 export type Debt = {
   id: string;
   name: string;
-  type: 'personal_loan' | 'credit_card' | 'owed_to' | 'owed_by';
+  type: "personal_loan" | "credit_card" | "owed_to" | "owed_by";
   total_amount: number;
   remaining_balance: number;
   interest_rate?: number | null;
@@ -234,28 +334,42 @@ export type MonthlySummary = {
 
 // ── Theme ───────────────────────────────────────────────────────────────────
 
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = "light" | "dark" | "system";
 
-// ── Payment Modes ───────────────────────────────────────────────────────────
+// ── Constants ───────────────────────────────────────────────────────────────
 
 export const PAYMENT_MODES = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'upi', label: 'UPI' },
-  { value: 'card', label: 'Card' },
-  { value: 'net_banking', label: 'Net Banking' },
+  { value: "cash", label: "Cash" },
+  { value: "upi", label: "UPI" },
+  { value: "card", label: "Card" },
+  { value: "net_banking", label: "Net Banking" },
 ] as const;
 
 export const BILL_FREQUENCIES = [
-  { value: 'once', label: 'One-time' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'quarterly', label: 'Quarterly' },
-  { value: 'yearly', label: 'Yearly' },
+  { value: "once", label: "One-time" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "yearly", label: "Yearly" },
 ] as const;
 
 export const DEBT_TYPES = [
-  { value: 'personal_loan', label: 'Personal Loan' },
-  { value: 'credit_card', label: 'Credit Card' },
-  { value: 'owed_to', label: 'Owed To (I owe)' },
-  { value: 'owed_by', label: 'Owed By (They owe me)' },
+  { value: "personal_loan", label: "Personal Loan" },
+  { value: "credit_card", label: "Credit Card" },
+  { value: "owed_to", label: "Owed To (I owe)" },
+  { value: "owed_by", label: "Owed By (They owe me)" },
+] as const;
+
+export const ACCOUNT_TYPES = [
+  { value: "bank", label: "Bank Account" },
+  { value: "cash", label: "Cash" },
+  { value: "wallet", label: "Digital Wallet" },
+  { value: "credit_card", label: "Credit Card" },
+  { value: "loan", label: "Loan" },
+] as const;
+
+export const TRANSACTION_TYPES = [
+  { value: "expense", label: "Expense" },
+  { value: "income", label: "Income" },
+  { value: "transfer", label: "Transfer" },
 ] as const;

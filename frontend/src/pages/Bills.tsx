@@ -1,50 +1,110 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { api } from '../services/api';
-import type { Bill } from '../types';
-import { BILL_FREQUENCIES } from '../types';
+import React, { useState, useEffect, useMemo } from "react";
+import { api } from "@/services/api";
+import type { Bill } from "@/types";
+import { BILL_FREQUENCIES } from "@/types";
 import {
-  Plus, X, Check, AlertTriangle,
-  Clock, CheckCircle2, Bell, Trash2, Receipt, ChevronLeft, ChevronRight
-} from 'lucide-react';
+  Plus,
+  Check,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+  Bell,
+  Trash2,
+  Receipt,
+  ChevronLeft,
+  ChevronRight,
+  X,
+} from "lucide-react";
 import {
-  format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval,
-  getDay, isSameMonth, isToday, addMonths, subMonths
-} from 'date-fns';
+  format,
+  parseISO,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  getDay,
+  isSameMonth,
+  isToday,
+  addMonths,
+  subMonths,
+} from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import clsx from "clsx";
 
 const CATEGORIES = [
-  'Food & Dining', 'Transport', 'Groceries', 'Shopping', 'Health',
-  'Utilities', 'Entertainment', 'Education', 'Travel', 'EMI/Loan',
-  'Rent', 'Savings', 'Miscellaneous',
+  "Food & Dining",
+  "Transport",
+  "Groceries",
+  "Shopping",
+  "Health",
+  "Utilities",
+  "Entertainment",
+  "Education",
+  "Travel",
+  "EMI/Loan",
+  "Rent",
+  "Savings",
+  "Miscellaneous",
 ];
 
-type ViewMode = 'list' | 'calendar';
+const NONE = "__none__";
 
 export const Bills: React.FC = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [view, setView] = useState<ViewMode>('list');
+  const [view, setView] = useState<"list" | "calendar">("list");
   const [calMonth, setCalMonth] = useState(new Date());
-  const [filter, setFilter] = useState<'all' | 'unpaid' | 'paid' | 'overdue'>('all');
+  const [filter, setFilter] = useState<"all" | "unpaid" | "paid" | "overdue">(
+    "all",
+  );
   const [form, setForm] = useState({
-    name: '', amount: '', is_variable: false, due_date: format(new Date(), 'yyyy-MM-dd'),
-    frequency: 'monthly', category: '', reminder_lead_days: '3',
-    auto_create_expense: false, description: '',
+    name: "",
+    amount: "",
+    is_variable: false,
+    due_date: format(new Date(), "yyyy-MM-dd"),
+    frequency: "monthly",
+    category: "",
+    reminder_lead_days: "3",
+    auto_create_expense: false,
+    description: "",
   });
 
   const fetchBills = async () => {
     try {
-      const res = await api.get('/bills');
+      const res = await api.get("/bills");
       setBills(res.data || []);
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { fetchBills(); }, []);
+  useEffect(() => {
+    fetchBills();
+  }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api.post('/bills', {
+    await api.post("/bills", {
       name: form.name,
       amount: parseFloat(form.amount),
       is_variable: form.is_variable,
@@ -56,7 +116,17 @@ export const Bills: React.FC = () => {
       description: form.description || null,
     });
     setShowModal(false);
-    setForm({ name: '', amount: '', is_variable: false, due_date: format(new Date(), 'yyyy-MM-dd'), frequency: 'monthly', category: '', reminder_lead_days: '3', auto_create_expense: false, description: '' });
+    setForm({
+      name: "",
+      amount: "",
+      is_variable: false,
+      due_date: format(new Date(), "yyyy-MM-dd"),
+      frequency: "monthly",
+      category: "",
+      reminder_lead_days: "3",
+      auto_create_expense: false,
+      description: "",
+    });
     fetchBills();
   };
 
@@ -75,32 +145,51 @@ export const Bills: React.FC = () => {
     fetchBills();
   };
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().split("T")[0];
 
-  const getStatus = (b: Bill): 'paid' | 'overdue' | 'upcoming' => {
-    if (b.is_paid) return 'paid';
-    if (b.due_date < today) return 'overdue';
-    return 'upcoming';
+  const getStatus = (b: Bill): "paid" | "overdue" | "upcoming" => {
+    if (b.is_paid) return "paid";
+    if (b.due_date < today) return "overdue";
+    return "upcoming";
   };
 
   const filteredBills = useMemo(() => {
-    return bills.filter(b => {
+    return bills.filter((b) => {
       const status = getStatus(b);
-      if (filter === 'all') return true;
-      if (filter === 'unpaid') return status !== 'paid';
-      if (filter === 'paid') return status === 'paid';
-      if (filter === 'overdue') return status === 'overdue';
+      if (filter === "all") return true;
+      if (filter === "unpaid") return status !== "paid";
+      if (filter === "paid") return status === "paid";
+      if (filter === "overdue") return status === "overdue";
       return true;
     });
   }, [bills, filter]);
 
   const statusConfig = {
-    paid: { color: '#22c55e', bg: 'rgba(34,197,94,0.1)', icon: CheckCircle2, label: 'Paid' },
-    overdue: { color: '#ef4444', bg: 'rgba(239,68,68,0.1)', icon: AlertTriangle, label: 'Overdue' },
-    upcoming: { color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', icon: Clock, label: 'Upcoming' },
+    paid: {
+      colorClass: "text-success",
+      bgClass: "bg-success/10",
+      borderClass: "border-success/20",
+      icon: CheckCircle2,
+      label: "Paid",
+    },
+    overdue: {
+      colorClass: "text-destructive",
+      bgClass: "bg-destructive/10",
+      borderClass: "border-destructive/20",
+      icon: AlertTriangle,
+      label: "Overdue",
+    },
+    upcoming: {
+      colorClass: "text-warning",
+      bgClass: "bg-warning/10",
+      borderClass: "border-warning/20",
+      icon: Clock,
+      label: "Upcoming",
+    },
   };
 
-  const fmt = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 0 })}`;
+  const fmt = (n: number) =>
+    `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0 })}`;
 
   // Calendar helpers
   const monthStart = startOfMonth(calMonth);
@@ -109,235 +198,548 @@ export const Bills: React.FC = () => {
   const startDow = getDay(monthStart);
   const billsByDate = useMemo(() => {
     const map: Record<string, Bill[]> = {};
-    bills.forEach(b => {
+    bills.forEach((b) => {
       if (!map[b.due_date]) map[b.due_date] = [];
       map[b.due_date].push(b);
     });
     return map;
   }, [bills]);
 
-  const unpaidTotal = bills.filter(b => !b.is_paid).reduce((s, b) => s + b.amount, 0);
-  const overdueCount = bills.filter(b => getStatus(b) === 'overdue').length;
+  const unpaidTotal = bills
+    .filter((b) => !b.is_paid)
+    .reduce((s, b) => s + b.amount, 0);
+  const overdueCount = bills.filter((b) => getStatus(b) === "overdue").length;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-10">
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Bills & Reminders</h1>
-          <p className="text-sm mt-0.5 text-muted">Track recurring bills and due dates</p>
+          <h1 className="text-2xl font-bold text-foreground">
+            Bills & Reminders
+          </h1>
+          <p className="text-sm mt-0.5 text-muted-foreground">
+            Track recurring bills and due dates
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <button onClick={() => setView('list')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'list' ? 'text-foreground bg-primary/15' : 'text-muted'}`}>List</button>
-            <button onClick={() => setView('calendar')} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'calendar' ? 'text-foreground bg-primary/15' : 'text-muted'}`}>Calendar</button>
-          </div>
-          <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-2 text-sm">
-            <Plus size={15} /> Add Bill
-          </button>
+        <div className="flex items-center gap-3">
+          <Tabs
+            value={view}
+            onValueChange={(v) => setView(v as "list" | "calendar")}
+            className="hidden sm:block"
+          >
+            <TabsList className="h-10 bg-muted/50 border border-border/40">
+              <TabsTrigger
+                value="list"
+                className="text-xs px-4 py-1.5 font-medium rounded-md"
+              >
+                List
+              </TabsTrigger>
+              <TabsTrigger
+                value="calendar"
+                className="text-xs px-4 py-1.5 font-medium rounded-md"
+              >
+                Calendar
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button
+            size="sm"
+            className="gap-2"
+            onClick={() => setShowModal(true)}
+          >
+            <Plus size={16} />{" "}
+            <span className="hidden sm:inline">Add Bill</span>
+          </Button>
         </div>
       </div>
 
+      <Tabs
+        value={view}
+        onValueChange={(v) => setView(v as "list" | "calendar")}
+        className="sm:hidden -mt-2"
+      >
+        <TabsList className="h-9 w-full bg-muted/50 border border-border/40">
+          <TabsTrigger
+            value="list"
+            className="flex-1 text-xs px-4 py-1 font-medium rounded-md"
+          >
+            List View
+          </TabsTrigger>
+          <TabsTrigger
+            value="calendar"
+            className="flex-1 text-xs px-4 py-1 font-medium rounded-md"
+          >
+            Calendar
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {/* Summary Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: 'Unpaid Total', value: fmt(unpaidTotal), color: '#fb7185' },
-          { label: 'Overdue', value: overdueCount, color: '#ef4444' },
-          { label: 'Total Bills', value: bills.length, color: '#818cf8' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="glass-panel p-4 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${color}18`, border: `1px solid ${color}30` }}>
-              <Receipt size={15} style={{ color }} />
-            </div>
-            <div>
-              <p className="text-xl font-bold text-foreground">{loading ? '—' : value}</p>
-              <p className="text-xs text-muted">{label}</p>
-            </div>
-          </div>
+          {
+            label: "Unpaid Total",
+            value: fmt(unpaidTotal),
+            icon: Receipt,
+            colorClass:
+              "bg-destructive/10 text-destructive border-destructive/20",
+          },
+          {
+            label: "Overdue",
+            value: overdueCount,
+            icon: AlertTriangle,
+            colorClass: "bg-warning/10 text-warning border-warning/20",
+          },
+          {
+            label: "Total Bills",
+            value: bills.length,
+            icon: Bell,
+            colorClass: "bg-primary/10 text-primary border-primary/20",
+          },
+        ].map(({ label, value, icon: Icon, colorClass }) => (
+          <Card
+            key={label}
+            className="glass-card border-border/40 hover:border-primary/20 transition-all duration-300"
+          >
+            <CardContent className="p-5 flex items-center gap-4">
+              <div
+                className={clsx(
+                  "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border",
+                  colorClass,
+                )}
+              >
+                <Icon size={18} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground tracking-tight">
+                  {loading ? "—" : value}
+                </p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-0.5">
+                  {label}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex gap-2">
-        {(['all', 'unpaid', 'overdue', 'paid'] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all ${filter === f ? 'text-foreground bg-primary/10 border border-primary/20' : 'text-muted hover:text-foreground'}`}
-          >{f}</button>
-        ))}
-      </div>
+      <Tabs
+        value={filter}
+        onValueChange={(v) => setFilter(v as typeof filter)}
+        className="w-full overflow-x-auto scroolbar-hide"
+      >
+        <TabsList className="h-10 w-auto flex-nowrap bg-muted/50 border border-border/40 p-1 justify-start">
+          {(["all", "unpaid", "overdue", "paid"] as const).map((f) => (
+            <TabsTrigger
+              key={f}
+              value={f}
+              className="text-xs font-medium capitalize px-4 py-1.5 rounded-md data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
+            >
+              {f}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {/* Create Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }} onClick={e => { if (e.target === e.currentTarget) setShowModal(false); }}>
-          <div className="w-full max-w-lg rounded-2xl p-6 animate-slide-up max-h-[90vh] overflow-y-auto" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-foreground">New Bill</h2>
-              <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg text-muted hover:text-foreground"><X size={16} /></button>
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="max-w-md sm:max-w-lg glass-card border-border/40 text-foreground max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl">New Bill</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-5 py-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Bill Name</Label>
+                <Input
+                  className="glass-panel"
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  placeholder="Rent, Netflix..."
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Amount (₹)</Label>
+                <Input
+                  className="glass-panel"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={form.amount}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, amount: e.target.value }))
+                  }
+                  required
+                />
+              </div>
             </div>
-            <form onSubmit={handleCreate} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label-text">Bill Name</label>
-                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="input-field" placeholder="Rent, Netflix..." required />
-                </div>
-                <div>
-                  <label className="label-text">Amount (₹)</label>
-                  <input type="number" step="0.01" min="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} className="input-field" required />
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Due Date</Label>
+                <Input
+                  className="glass-panel"
+                  type="date"
+                  value={form.due_date}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, due_date: e.target.value }))
+                  }
+                />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label-text">Due Date</label>
-                  <input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} className="input-field" />
-                </div>
-                <div>
-                  <label className="label-text">Frequency</label>
-                  <select value={form.frequency} onChange={e => setForm(f => ({ ...f, frequency: e.target.value }))} className="input-field">
-                    {BILL_FREQUENCIES.map(freq => <option key={freq.value} value={freq.value}>{freq.label}</option>)}
-                  </select>
-                </div>
+              <div className="space-y-2">
+                <Label>Frequency</Label>
+                <Select
+                  value={form.frequency}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, frequency: v }))
+                  }
+                >
+                  <SelectTrigger className="glass-panel">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass-panel">
+                    {BILL_FREQUENCIES.map((freq) => (
+                      <SelectItem key={freq.value} value={freq.value}>
+                        {freq.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label-text">Category</label>
-                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="input-field">
-                    <option value="">Select</option>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label-text">Remind Before (days)</label>
-                  <select value={form.reminder_lead_days} onChange={e => setForm(f => ({ ...f, reminder_lead_days: e.target.value }))} className="input-field">
-                    <option value="1">1 day</option>
-                    <option value="3">3 days</option>
-                    <option value="7">7 days</option>
-                  </select>
-                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select
+                  value={form.category || NONE}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, category: v === NONE ? "" : v }))
+                  }
+                >
+                  <SelectTrigger className="glass-panel">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent className="glass-panel">
+                    <SelectItem value={NONE}>Select</SelectItem>
+                    {CATEGORIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div>
-                <label className="label-text">Description (optional)</label>
-                <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="input-field" placeholder="Notes..." />
+              <div className="space-y-2">
+                <Label>Remind Before</Label>
+                <Select
+                  value={form.reminder_lead_days}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, reminder_lead_days: v }))
+                  }
+                >
+                  <SelectTrigger className="glass-panel">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass-panel">
+                    <SelectItem value="1">1 day</SelectItem>
+                    <SelectItem value="3">3 days</SelectItem>
+                    <SelectItem value="7">7 days</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="flex items-center gap-4 pt-1">
-                <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
-                  <input type="checkbox" checked={form.is_variable} onChange={e => setForm(f => ({ ...f, is_variable: e.target.checked }))} className="rounded" />
-                  Variable amount
-                </label>
-                <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
-                  <input type="checkbox" checked={form.auto_create_expense} onChange={e => setForm(f => ({ ...f, auto_create_expense: e.target.checked }))} className="rounded" />
-                  Auto-create expense on paid
-                </label>
-              </div>
-              <button type="submit" className="btn-primary w-full">Add Bill</button>
-            </form>
-          </div>
-        </div>
-      )}
+            </div>
+            <div className="space-y-2">
+              <Label>Description (optional)</Label>
+              <Input
+                className="glass-panel"
+                value={form.description}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, description: e.target.value }))
+                }
+                placeholder="Notes..."
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 pt-2">
+              <label className="flex flex-1 items-center gap-2.5 text-sm text-foreground cursor-pointer font-medium p-3 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/40 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={form.is_variable}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, is_variable: e.target.checked }))
+                  }
+                  className="w-4 h-4 rounded text-primary focus:ring-primary border-muted-foreground bg-transparent"
+                />
+                Variable amount
+              </label>
+              <label className="flex flex-1 items-center gap-2.5 text-sm text-foreground cursor-pointer font-medium p-3 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/40 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={form.auto_create_expense}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      auto_create_expense: e.target.checked,
+                    }))
+                  }
+                  className="w-4 h-4 rounded text-primary focus:ring-primary border-muted-foreground bg-transparent"
+                />
+                Auto-create expense
+              </label>
+            </div>
+            <div className="pt-2 border-t border-border/40">
+              <Button type="submit" className="w-full gap-2">
+                <Plus size={16} /> Add Bill
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Calendar View */}
-      {view === 'calendar' && (
-        <div className="glass-panel p-5">
-          <div className="flex items-center justify-between mb-4">
-            <button onClick={() => setCalMonth(subMonths(calMonth, 1))} className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-white/5"><ChevronLeft size={16} /></button>
-            <h3 className="text-sm font-semibold text-foreground">{format(calMonth, 'MMMM yyyy')}</h3>
-            <button onClick={() => setCalMonth(addMonths(calMonth, 1))} className="p-2 rounded-lg text-muted hover:text-foreground hover:bg-white/5"><ChevronRight size={16} /></button>
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-              <div key={d} className="text-center text-xs text-muted py-2 font-medium">{d}</div>
-            ))}
-            {Array.from({ length: startDow }).map((_, i) => <div key={`e-${i}`} />)}
-            {days.map(day => {
-              const dateStr = format(day, 'yyyy-MM-dd');
-              const dayBills = billsByDate[dateStr] || [];
-              const hasBills = dayBills.length > 0;
-              const hasOverdue = dayBills.some(b => !b.is_paid && dateStr < today);
-              return (
-                <div
-                  key={dateStr}
-                  className={`relative p-2 rounded-lg text-center text-xs min-h-[48px] transition-all ${
-                    isToday(day) ? 'ring-1 ring-primary/30' : ''
-                  } ${!isSameMonth(day, calMonth) ? 'opacity-30' : ''}`}
-                  style={{ background: hasBills ? 'rgba(99,102,241,0.06)' : 'transparent' }}
-                >
-                  <span className={`${isToday(day) ? 'text-primary font-bold' : 'text-foreground'}`}>
-                    {format(day, 'd')}
-                  </span>
-                  {hasBills && (
-                    <div className="flex justify-center gap-0.5 mt-1">
-                      {dayBills.slice(0, 3).map((b, i) => (
-                        <div
-                          key={i}
-                          className="w-1.5 h-1.5 rounded-full"
-                          style={{ background: b.is_paid ? '#22c55e' : hasOverdue ? '#ef4444' : '#f59e0b' }}
-                          title={`${b.name}: ${fmt(b.amount)}`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* List View */}
-      {view === 'list' && (
-        <div className="glass-panel overflow-hidden">
-          {loading ? (
-            <div className="p-4 text-center text-muted">Loading...</div>
-          ) : filteredBills.length === 0 ? (
-            <div className="p-12 text-center">
-              <Bell size={28} className="mx-auto mb-3 opacity-20 text-muted" />
-              <p className="text-sm text-muted">No bills found</p>
+      {view === "calendar" && (
+        <Card className="glass-card border-border/40 shadow-sm animate-scale-in">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-6">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 bg-muted/30 border-border/60 hover:bg-muted/60"
+                onClick={() => setCalMonth(subMonths(calMonth, 1))}
+              >
+                <ChevronLeft size={18} />
+              </Button>
+              <h3 className="text-base font-bold text-foreground tracking-tight">
+                {format(calMonth, "MMMM yyyy")}
+              </h3>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 bg-muted/30 border-border/60 hover:bg-muted/60"
+                onClick={() => setCalMonth(addMonths(calMonth, 1))}
+              >
+                <ChevronRight size={18} />
+              </Button>
             </div>
-          ) : (
-            <div>
-              {filteredBills.map(b => {
-                const status = getStatus(b);
-                const cfg = statusConfig[status];
-                const StatusIcon = cfg.icon;
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                <div
+                  key={d}
+                  className="text-center text-xs text-muted-foreground py-2 font-semibold uppercase tracking-wider"
+                >
+                  {d}
+                </div>
+              ))}
+              {Array.from({ length: startDow }).map((_, i) => (
+                <div key={`e-${i}`} />
+              ))}
+              {days.map((day) => {
+                const dateStr = format(day, "yyyy-MM-dd");
+                const dayBills = billsByDate[dateStr] || [];
+                const hasBills = dayBills.length > 0;
+                const hasOverdue = dayBills.some(
+                  (b) => !b.is_paid && dateStr < today,
+                );
+
                 return (
-                  <div key={b.id} className="flex items-center justify-between px-3 sm:px-5 py-3.5 sm:py-4 group" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: cfg.bg, border: `1px solid ${cfg.color}30` }}>
-                        <StatusIcon size={14} style={{ color: cfg.color }} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                          <p className="text-sm font-medium text-foreground truncate">{b.name}</p>
-                          <span className="text-xs px-1.5 py-0.5 rounded flex-shrink-0" style={{ background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
-                        </div>
-                        <p className="text-xs text-muted truncate">
-                          {b.category || 'Uncategorized'} · Due {format(parseISO(b.due_date), 'MMM d')}
-                          <span className="hidden sm:inline"> · {BILL_FREQUENCIES.find(f => f.value === b.frequency)?.label || b.frequency}</span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 ml-2">
-                      <span className="text-sm font-semibold" style={{ color: status === 'paid' ? '#22c55e' : '#fb7185' }}>
-                        {fmt(b.amount)}
-                      </span>
-                      {!b.is_paid ? (
-                        <button onClick={() => handleMarkPaid(b.id)} className="p-1.5 rounded-lg text-muted hover:text-success hover:bg-success/10 transition-all" title="Mark paid">
-                          <Check size={14} />
-                        </button>
-                      ) : (
-                        <button onClick={() => handleMarkUnpaid(b.id)} className="p-1.5 rounded-lg text-muted hover:text-warning hover:bg-warning/10 transition-all" title="Mark unpaid">
-                          <X size={14} />
-                        </button>
+                  <div
+                    key={dateStr}
+                    className={clsx(
+                      "relative p-2 rounded-xl text-center text-xs min-h-[50px] sm:min-h-[64px] border border-transparent transition-all",
+                      isToday(day)
+                        ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                        : "",
+                      !isSameMonth(day, calMonth)
+                        ? "opacity-30"
+                        : "hover:border-border/60 hover:bg-muted/20",
+                      hasBills ? "bg-muted/40" : "",
+                    )}
+                  >
+                    <span
+                      className={clsx(
+                        "font-medium",
+                        isToday(day)
+                          ? "text-primary font-bold text-sm"
+                          : "text-foreground",
                       )}
-                      <button onClick={() => handleDelete(b.id)} className="p-1.5 rounded-lg sm:opacity-0 sm:group-hover:opacity-100 text-muted hover:text-danger hover:bg-danger/10 transition-all">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
+                    >
+                      {format(day, "d")}
+                    </span>
+                    {hasBills && (
+                      <div className="flex justify-center gap-1 mt-1.5 flex-wrap">
+                        {dayBills.slice(0, 3).map((b, i) => (
+                          <div
+                            key={i}
+                            className={clsx(
+                              "w-2 h-2 rounded-full",
+                              b.is_paid
+                                ? "bg-success shadow-[0_0_6px_hsl(var(--success)/0.4)]"
+                                : hasOverdue
+                                  ? "bg-destructive shadow-[0_0_6px_hsl(var(--destructive)/0.4)]"
+                                  : "bg-warning shadow-[0_0_6px_hsl(var(--warning)/0.4)]",
+                            )}
+                            title={`${b.name}: ${fmt(b.amount)}`}
+                          />
+                        ))}
+                        {dayBills.length > 3 && (
+                          <div
+                            className="w-2 h-2 rounded-full bg-muted-foreground/50 border border-border flex items-center justify-center text-[8px]"
+                            title={`${dayBills.length - 3} more`}
+                          >
+                            +
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* List View */}
+      {view === "list" && (
+        <Card className="glass-card border-border/40 overflow-hidden shadow-sm animate-scale-in">
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="space-y-0">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between px-5 py-4 border-b border-border/40"
+                  >
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="w-10 h-10 rounded-xl" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-32 rounded" />
+                        <Skeleton className="h-3 w-48 rounded" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-6 w-20 rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : filteredBills.length === 0 ? (
+              <div className="py-20 text-center">
+                <div className="w-16 h-16 rounded-full bg-muted/30 flex items-center justify-center mx-auto mb-4 border border-border/40">
+                  <Bell size={28} className="text-muted-foreground/60" />
+                </div>
+                <p className="text-base font-semibold text-foreground mb-1">
+                  No bills found
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Add a bill to start tracking due dates.
+                </p>
+              </div>
+            ) : (
+              <div>
+                {filteredBills.map((b) => {
+                  const status = getStatus(b);
+                  const cfg = statusConfig[status];
+                  const StatusIcon = cfg.icon;
+                  return (
+                    <div
+                      key={b.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between px-4 sm:px-6 py-4 group border-b border-border/40 last:border-0 transition-colors hover:bg-muted/30 gap-4 sm:gap-0"
+                    >
+                      <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                        <div
+                          className={clsx(
+                            "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border",
+                            cfg.bgClass,
+                            cfg.colorClass,
+                            cfg.borderClass,
+                          )}
+                        >
+                          <StatusIcon size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <p className="text-sm sm:text-base font-semibold text-foreground truncate">
+                              {b.name}
+                            </p>
+                            <span
+                              className={clsx(
+                                "text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded border",
+                                cfg.bgClass,
+                                cfg.colorClass,
+                                cfg.borderClass,
+                              )}
+                            >
+                              {cfg.label}
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-muted-foreground truncate">
+                            {b.category || "Uncategorized"}{" "}
+                            <span className="mx-1.5 opacity-50">&bull;</span>{" "}
+                            Due {format(parseISO(b.due_date), "MMM d, yyyy")}
+                            <span className="hidden sm:inline">
+                              {" "}
+                              <span className="mx-1.5 opacity-50">
+                                &bull;
+                              </span>{" "}
+                              {BILL_FREQUENCIES.find(
+                                (f) => f.value === b.frequency,
+                              )?.label || b.frequency}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 w-full sm:w-auto pl-14 sm:pl-0">
+                        <span
+                          className={clsx(
+                            "text-base font-bold",
+                            status === "paid"
+                              ? "text-success"
+                              : "text-foreground",
+                          )}
+                        >
+                          {fmt(b.amount)}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {!b.is_paid ? (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 bg-success/10 border-success/20 text-success hover:bg-success hover:text-success-foreground"
+                              onClick={() => handleMarkPaid(b.id)}
+                              title="Mark paid"
+                            >
+                              <Check size={16} />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 bg-warning/10 border-warning/20 text-warning hover:bg-warning hover:text-warning-foreground"
+                              onClick={() => handleMarkUnpaid(b.id)}
+                              title="Mark unpaid"
+                            >
+                              <X size={16} />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 sm:opacity-0 sm:group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleDelete(b.id)}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
     </div>
   );
