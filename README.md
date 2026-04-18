@@ -127,3 +127,4 @@ npm run dev
 - Keep schema changes in Alembic migrations only.
 - Keep PRs small and testable.
 - Rotate secrets on leak suspicion.
+"# Finlo-yourallin1finance" 
